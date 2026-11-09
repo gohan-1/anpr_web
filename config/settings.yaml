@@ -1,0 +1,23 @@
+# All tunable values live here. Change them without touching code.
+
+paths:
+  input_dir: ./data          # one sub-folder per vehicle/event
+  output_dir: ./output       # accepted/ review/ no_plate/ failed/ created here
+  image_extensions: [".jpg", ".jpeg", ".png", ".bmp"]
+
+api:
+  url: "https://your-plate-api.example.com/recognize"
+  api_key: ""                # or set env var ANPR_API_KEY
+  timeout_seconds: 15
+  retries: 3
+  retry_delay_seconds: 5
+  mock: true                 # true = fake responses for local testing, no real API calls
+
+
+decision:
+  accept_score: 0.85         # API confidence (+ consensus boost) needed for auto-accept
+  review_floor: 0.60         # below this = low-confidence review
+  conflict_confidence: 0.80  # two different plates above this = conflict
+  consensus_boost: 0.03      # added per extra image agreeing on the same plate
+  max_consensus_boost: 0.09
+  plate_regex: "^[A-Z0-9]{4,10}$"   # replace with your country's plate format
