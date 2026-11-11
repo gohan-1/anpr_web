@@ -49,7 +49,7 @@
   <!-- DB -->
   <rect class="box" x="860" y="120" width="340" height="250" fill="#EEF5F0" stroke="#2E7D4F"/>
   <text x="880" y="155" class="t">App database</text>
-  <text x="880" y="180" class="m">web/db.sqlite3</text>
+  <text x="880" y="180" class="m">PostgreSQL  anpr</text>
   <text x="880" y="215" class="s"><tspan font-weight="700">WorkItem</tspan>  the queue (1 row / folder)</text>
   <text x="880" y="243" class="s"><tspan font-weight="700">Bot</tspan>  settings, state, heartbeat</text>
   <text x="880" y="271" class="s"><tspan font-weight="700">Folder</tspan>  result per vehicle folder</text>
@@ -154,7 +154,7 @@
   <rect x="40" y="830" width="1520" height="180" rx="12" fill="#F7F8F8" stroke="#D5DADD"/>
   <text x="60" y="862" font-size="18" font-weight="700" fill="#1D252C">The steps</text>
   <text x="60" y="892" class="s"><tspan font-weight="700">1</tspan> Supervisor scans each bot's input folder and the default data/ folder every 30 s.</text>
-  <text x="60" y="918" class="s"><tspan font-weight="700">2</tspan> Each new vehicle folder becomes one WorkItem row (pending). A bot's own folder is assigned to that bot; others are shared.</text>
+  <text x="60" y="918" class="s"><tspan font-weight="700">2</tspan> Each new vehicle folder becomes one WorkItem row (pending, path unique). A bot's own folder is assigned to that bot; others are shared.</text>
   <text x="60" y="944" class="s"><tspan font-weight="700">3</tspan> A bot claims pending rows atomically (two bots never get the same folder).  <tspan font-weight="700">4–5</tspan> It reads each image and sends it to the OCR API inside a Prefect flow run.</text>
   <text x="60" y="970" class="s"><tspan font-weight="700">6</tspan> Results are saved: 1 Folder row + 1 Image row per image; the WorkItem becomes done (failed after 3 tries).</text>
   <text x="60" y="996" class="s"><tspan font-weight="700">7</tspan> The web app reads results and writes your Start / Stop / input-folder choices to the Bot table, which the supervisor follows.</text>

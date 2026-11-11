@@ -106,8 +106,14 @@ def enqueue_folders(input_dir: Path, min_age_seconds: int = 0, batch_size: int =
 
 
 # ---------------------------------------------------------------- taking work
-def claim(bot: Bot, limit: int) -> list[WorkItem]:
+def claim(bot: Bot, limit: int, help_shared: bool = False) -> list[WorkItem]:
     """Gives this bot up to `limit` pending folders. Two bots can never get the same one.
+
+    WHICH folders:
+      * a bot without an input folder takes shared (unassigned) folders;
+      * a bot with an input folder takes its own folders first. With help_shared=True
+        (bots.help_shared_queue in settings.yaml) it fills any spare room with shared
+        folders, so no folder waits just because no bot is free for it.
 
     HOW: we pick candidate rows, then for EACH row run
         UPDATE ... SET status='in_progress' WHERE id=<row> AND status='pending'
@@ -117,19 +123,32 @@ def claim(bot: Bot, limit: int) -> list[WorkItem]:
     """
     if limit <= 0:
         return []
+    pending = WorkItem.objects.filter(status=Status.PENDING)
+    shared = pending.filter(assigned_bot__isnull=True)
     claimed_ids = []
     with transaction.atomic():
-        candidates = WorkItem.objects.filter(status=Status.PENDING).order_by("id")
-        # A bot with its own input folder only takes folders assigned to it;
-        # a bot without one takes the shared (unassigned) folders.
-        candidates = candidates.filter(assigned_bot=bot) if bot.input_dir else candidates.filter(assigned_bot__isnull=True)
-        if connection.features.has_select_for_update_skip_locked:
-            candidates = candidates.select_for_update(skip_locked=True)
-        for item_id in candidates.values_list("id", flat=True)[:limit]:
-            won = (WorkItem.objects.filter(id=item_id, status=Status.PENDING).update(status=Status.IN_PROGRESS, bot=bot, bot_name=bot.name,claimed_at=timezone.now(), attempts=F("attempts") + 1))
-            if won:
-                claimed_ids.append(item_id)
+        if bot.input_dir:
+            claimed_ids += _claim_from(pending.filter(assigned_bot=bot), bot, limit)
+            if help_shared and len(claimed_ids) < limit:
+                claimed_ids += _claim_from(shared, bot, limit - len(claimed_ids))
+        else:
+            claimed_ids += _claim_from(shared, bot, limit)
     return list(WorkItem.objects.filter(id__in=claimed_ids))
+
+
+def _claim_from(candidates, bot: Bot, limit: int) -> list[int]:
+    """Atomically claims up to `limit` rows of `candidates` for `bot`; returns their ids."""
+    candidates = candidates.order_by("id")
+    if connection.features.has_select_for_update_skip_locked:
+        candidates = candidates.select_for_update(skip_locked=True)
+    won_ids = []
+    for item_id in candidates.values_list("id", flat=True)[:limit]:
+        won = (WorkItem.objects.filter(id=item_id, status=Status.PENDING)
+               .update(status=Status.IN_PROGRESS, bot=bot, bot_name=bot.name,
+                       claimed_at=timezone.now(), attempts=F("attempts") + 1))
+        if won:
+            won_ids.append(item_id)
+    return won_ids
 
 
 def complete(item: WorkItem, folder) -> None:

@@ -94,6 +94,9 @@ class Command(BaseCommand):
                                 log(bot, f"Stopping: finishing {len(running)} folder(s) in progress")
                     if fresh:
                         bot = fresh
+                        if (bot.rate_limit or 0.0) != limiter.per_second:     # edited on the Bots page
+                            limiter.set_rate(bot.rate_limit)
+                            log(bot, f"Rate limit is now {bot.rate_limit or 'unlimited'} calls/s")
                         Bot.objects.filter(pk=bot.pk).update(
                             last_heartbeat=timezone.now(),
                             current_task="\n".join(Path(i.path).name for i in running.values()))
@@ -103,7 +106,7 @@ class Command(BaseCommand):
                 # --- claim more work if there's room -------------------------------------
                 if not stopping:
                     room = min(bot.concurrency, bcfg["max_concurrency"]) - len(running)
-                    for item in queue.claim(bot, room):
+                    for item in queue.claim(bot, room, help_shared=bcfg.get("help_shared_queue", True)):
                         running[pool.submit(work, Path(item.path))] = item
 
                 if stopping and not running:

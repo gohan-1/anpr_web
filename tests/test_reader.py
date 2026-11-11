@@ -17,6 +17,7 @@ TMP = Path(tempfile.mkdtemp())
 LOW, HIGH = TMP / "low", TMP / "high"
 
 # --- point the app at a test database and test sources BEFORE importing it ---
+os.environ["ANPR_DB_ENGINE"] = "sqlite"            # never the real database, even if main/.env says postgres
 os.environ["ANPR_DB_PATH"] = str(TMP / "test.sqlite3")
 cfg = yaml.safe_load(open(ROOT / "config" / "settings.yaml"))
 cfg["reader"]["sources"] = [

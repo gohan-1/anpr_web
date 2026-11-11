@@ -11,9 +11,17 @@ import time
 
 class RateLimiter:
     def __init__(self, per_second: float):
+        self.per_second = per_second or 0.0
         self.interval = 1.0 / per_second if per_second else 0.0
         self._lock = threading.Lock()
         self._next_slot = time.monotonic()
+
+    def set_rate(self, per_second: float) -> None:
+        """Change the limit while threads are using it (e.g. edited on the Bots page)."""
+        with self._lock:
+            self.per_second = per_second or 0.0
+            self.interval = 1.0 / per_second if per_second else 0.0
+            self._next_slot = min(self._next_slot, time.monotonic() + self.interval)
 
     def wait(self) -> None:
         if not self.interval:

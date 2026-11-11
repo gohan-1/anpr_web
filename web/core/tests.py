@@ -171,6 +171,35 @@ class QueueTests(TestCase):
             self.assertEqual(got_owner, {"car_g0", "car_g1", "car_g2"})
             self.assertEqual(got_shared, {"car_s0", "car_s1", "car_s2"})
 
+    def test_bot_with_input_folder_helps_with_shared_folders_after_its_own(self):
+        with tempfile.TemporaryDirectory() as d:
+            gate1 = Path(d) / "gate1"
+            gate1.mkdir()
+            for n in range(2):
+                (gate1 / f"car_g{n}").mkdir()
+            for n in range(3):
+                (Path(d) / f"car_s{n}").mkdir()
+            owner = make_bot("owner", input_dir=str(gate1))
+            queue.scan_all(Path(d), 0)
+            first = [Path(i.path).name for i in queue.claim(owner, 3, help_shared=True)]
+            self.assertEqual(sorted(first[:2]), ["car_g0", "car_g1"])          # its own folders first
+            self.assertTrue(first[2].startswith("car_s"))                       # spare room: a shared one
+            rest = {Path(i.path).name for i in queue.claim(owner, 10, help_shared=True)}
+            self.assertEqual(len(rest), 2)                                      # the other 2 shared ones
+            self.assertFalse(set(first) & rest)                                 # never the same folder twice
+            self.assertEqual(queue.claim(owner, 10, help_shared=True), [])      # nothing left
+
+    def test_other_bots_own_folders_are_never_taken_as_help(self):
+        with tempfile.TemporaryDirectory() as d:
+            gate1, gate2 = Path(d) / "gate1", Path(d) / "gate2"
+            for g in (gate1, gate2):
+                g.mkdir()
+                (g / "car").mkdir()
+            b1 = make_bot("b1", input_dir=str(gate1))
+            make_bot("b2", input_dir=str(gate2))
+            queue.scan_all(Path(d), 0)
+            self.assertEqual([i.path for i in queue.claim(b1, 10, help_shared=True)], [str(gate1 / "car")])
+
     def test_bot_given_a_single_vehicle_folder_processes_it(self):
         with tempfile.TemporaryDirectory() as d:
             car = Path(d).resolve() / "vehicle_002"
@@ -307,3 +336,60 @@ class BrowseTests(TestCase):
     def test_needs_login(self):
         from rest_framework.test import APIClient
         self.assertEqual(APIClient().get("/api/browse/").status_code, 401)
+
+
+# ============================================================================ reset_results
+from django.contrib.auth import get_user_model as _get_user_model  # noqa: E402
+from django.core.management import CommandError, call_command  # noqa: E402
+
+from .models import BotEvent  # noqa: E402
+
+
+class ResetResultsTests(TestCase):
+    def setUp(self):
+        from pipeline.processor import ImageAnalysis
+        from .ingest import save_folder_result
+        self.user = _get_user_model().objects.create_user("keep-me", password="x")
+        self.bot = make_bot("bot-1")
+        Bot.objects.filter(pk=self.bot.pk).update(processed=2, failed=1)
+        BotEvent.objects.create(bot=self.bot, message="hello")
+        for name in ("ocr_1", "ocr_2"):
+            f = save_folder_result(Path(f"/d/{name}"), [ImageAnalysis(Path(f"/d/{name}/a.jpg"), plate="AB12", confidence=0.9)],
+                                   processed_by="bot-1")
+            WorkItem.objects.create(path=f"/d/{name}", status=WorkItem.Status.DONE, folder=f, bot_name="bot-1")
+        WorkItem.objects.create(path="/d/ocr_3", status=WorkItem.Status.IN_PROGRESS)
+
+    def test_reset_all_deletes_results_and_keeps_bots_and_users(self):
+        call_command("reset_results", "--yes", stdout=open("/dev/null", "w"))
+        self.assertEqual((WorkItem.objects.count(), Folder.objects.count(), Image.objects.count(),
+                          BotEvent.objects.count()), (0, 0, 0, 0))
+        bot = Bot.objects.get()
+        self.assertEqual((bot.name, bot.processed, bot.failed), ("bot-1", 0, 0))
+        self.assertTrue(bot.api_password_encrypted)                   # API login kept
+        self.assertTrue(_get_user_model().objects.filter(username="keep-me").exists())
+
+    def test_reprocess_one_folder_deletes_only_that_folder(self):
+        call_command("reset_results", "--folder", "ocr_1", "--yes", stdout=open("/dev/null", "w"))
+        self.assertEqual(sorted(WorkItem.objects.values_list("path", flat=True)), ["/d/ocr_2", "/d/ocr_3"])
+        self.assertEqual(list(Folder.objects.values_list("path", flat=True)), ["/d/ocr_2"])
+        self.assertEqual(Image.objects.count(), 1)
+
+    def test_folder_a_bot_is_working_on_is_not_touched(self):
+        with self.assertRaises(CommandError):                          # only match is in progress -> nothing to do
+            call_command("reset_results", "--folder", "ocr_3", "--yes", stdout=open("/dev/null", "w"))
+        self.assertTrue(WorkItem.objects.filter(path="/d/ocr_3").exists())
+
+    def test_reprocessed_folder_is_queued_again_by_the_next_scan(self):
+        with tempfile.TemporaryDirectory() as d:
+            car = Path(d).resolve() / "ocr_9"
+            car.mkdir()
+            queue.scan_all(Path(d), 0)
+            WorkItem.objects.filter(path=str(car)).update(status=WorkItem.Status.DONE)
+            self.assertEqual(queue.scan_all(Path(d), 0).get(str(Path(d).resolve()), 0), 0)   # done: not again
+            call_command("reset_results", "--folder", str(car), "--yes", stdout=open("/dev/null", "w"))
+            queue.scan_all(Path(d), 0)
+            self.assertEqual(WorkItem.objects.get(path=str(car)).status, WorkItem.Status.PENDING)
+
+    def test_unknown_folder_is_an_error(self):
+        with self.assertRaises(CommandError):
+            call_command("reset_results", "--folder", "nope", "--yes", stdout=open("/dev/null", "w"))

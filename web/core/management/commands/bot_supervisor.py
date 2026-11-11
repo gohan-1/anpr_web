@@ -17,6 +17,7 @@ It runs forever and, every 2 seconds, makes reality match the Bots table:
 This "compare what we want with what is, then fix the difference" loop is called
 reconciliation. Kubernetes works exactly the same way, which makes it easy to move later.
 """
+import signal
 import subprocess
 import sys
 import time
@@ -58,6 +59,12 @@ class Command(BaseCommand):
                 raise CommandError(f"Input folder {input_dir} does not exist. Set paths.input_dir in settings.yaml.")
         last_scan = 0.0
 
+        # `kill`, `make stop` and systemd send SIGTERM, not Ctrl+C. Treat it the same way, so the
+        # bots are stopped gracefully instead of being left running without a supervisor.
+        def _terminate(*_):
+            raise KeyboardInterrupt
+        signal.signal(signal.SIGTERM, _terminate)
+
         # Bots that were "running" before the supervisor (re)started have no process now.
         Bot.objects.filter(state__in=[Bot.State.RUNNING, Bot.State.STARTING, Bot.State.STOPPING],
                            pid__isnull=False).update(state=Bot.State.STOPPED, pid=None)
@@ -77,6 +84,7 @@ class Command(BaseCommand):
                             self.stdout.write(f"Queued {added} new folder(s) from {where}")
                 time.sleep(opts["interval"])
         except KeyboardInterrupt:
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)   # a second stop signal must not cut this short
             self.stdout.write("Stopping all bots...")
             for proc in self.procs.values():
                 proc.terminate()                         # bots catch this and finish gracefully

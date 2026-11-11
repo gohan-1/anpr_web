@@ -1,17 +1,3 @@
-"""
-Runs a bot's folder through Prefect, so every folder shows up in the Prefect dashboard.
-
-    flow run  "bot-2: ocr_4393072"        (one per folder, tagged bot:bot-2)
-      task    "ocr entry_image.jpg"       (one per image, run in parallel)
-      task    "ocr exit_image.jpg"
-      ...
-
-The bot (web/core/management/commands/run_bot.py) still owns the queue, Start/Stop and
-saving to the database. Prefect only runs and records the OCR work.
-
-Passwords are NOT flow parameters (Prefect stores and shows parameters in its UI).
-Each bot process registers its credentials here once, and tasks look them up by bot name.
-"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -21,7 +7,8 @@ from prefect.cache_policies import NO_CACHE
 from prefect.runtime import flow_run
 from prefect.task_runners import ThreadPoolTaskRunner
 
-from pipeline.processor import ImageAnalysis, call_api_with_retries, list_images
+from pipeline.processor import ImageAnalysis, list_images
+from pipeline.processor import ocr_image as ocr_one
 
 _BOTS: dict[str, tuple] = {}     # bot name -> (cfg, credentials, limiter), in this process only
 
@@ -33,12 +20,8 @@ def register_bot(name: str, cfg: dict, credentials, limiter) -> None:
 @task(name="ocr-image", task_run_name="ocr {path.name}", cache_policy=NO_CACHE)
 def ocr_image(path: Path, bot: str) -> ImageAnalysis:
     cfg, credentials, limiter = _BOTS[bot]
-    item = ImageAnalysis(path)
-    try:
-        api = call_api_with_retries(path, cfg["api"], credentials, limiter)   # backoff + rate limit
-        item.plate, item.confidence, item.raw = api["plate"], api["confidence"], api["raw"]
-    except Exception as exc:                 # recorded on the image, the folder still finishes
-        item.error = f"{type(exc).__name__}: {exc}"
+    item = ocr_one(path, cfg["api"], credentials, limiter)   # timed; backoff + rate limit
+    if item.error:                           # recorded on the image, the folder still finishes
         get_run_logger().warning(f"{path.name}: {item.error}")
     return item
 

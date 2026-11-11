@@ -13,13 +13,13 @@
   </defs>
   <rect width="1600" height="1100" fill="#FFFFFF"/>
   <text x="40" y="52" font-size="30" font-weight="700" fill="#1D252C">ANPR: where data is stored and how it grows</text>
-  <text x="40" y="82" class="s">Two SQLite databases and the image folders. Sizes are estimates for planning; measure on your real data.</text>
+  <text x="40" y="82" class="s">PostgreSQL (app), SQLite (Prefect history) and the image folders. Sizes are estimates for planning; measure on your real data.</text>
 
   <!-- ============ App DB ============ -->
   <rect x="40" y="110" width="820" height="560" rx="12" fill="#EEF5F0" stroke="#2E7D4F" stroke-width="2"/>
   <text x="60" y="146" class="t">App database</text>
-  <text x="250" y="146" class="m">main/web/db.sqlite3</text>
-  <text x="60" y="172" class="s">Written by bots and supervisor, read by the web app. The source of truth.</text>
+  <text x="250" y="146" class="m">PostgreSQL database anpr</text>
+  <text x="60" y="172" class="s">Written by bots, supervisor and reader service; read by the web app. Source of truth.</text>
 
   <rect x="60" y="188" width="780" height="34" fill="#DCEBE1"/>
   <text x="72" y="210" class="h">TABLE</text>
@@ -66,17 +66,17 @@
     <text x="555" y="486" class="ok">Token deleted on logout.</text>
     <line x1="60" y1="500" x2="840" y2="500" stroke="#C9DCCF"/>
 
-    <text x="72" y="526" class="b">Job</text>
-    <text x="200" y="526" class="s">old flows.py run</text>
-    <text x="400" y="526" class="s">tiny</text>
-    <text x="555" y="526" class="s">Not used by bots.</text>
+    <text x="72" y="526" class="b">Intake…</text>
+    <text x="200" y="526" class="s">reader folder / image</text>
+    <text x="400" y="526" class="s">~0.4 / 0.3 KB</text>
+    <text x="555" y="526" class="bad">Never.</text>
   </g>
 
   <rect x="60" y="548" width="780" height="104" rx="8" fill="#FFFFFF" stroke="#C9DCCF"/>
-  <text x="76" y="574" class="b">How many writers at once?</text>
-  <text x="76" y="598" class="s">• WAL mode: the web app can read while a bot writes.</text>
-  <text x="76" y="620" class="s">• Each bot writes only from its main thread; 20 s wait if the database is busy.</text>
-  <text x="76" y="642" class="s">• Queue claims are one atomic UPDATE, so two bots never get the same folder.</text>
+  <text x="76" y="574" class="b">Many processes at once</text>
+  <text x="76" y="598" class="s">• PostgreSQL: web app, reader, supervisor and all bots read and write together.</text>
+  <text x="76" y="620" class="s">• Each bot writes only from its main thread; OCR threads never touch the database.</text>
+  <text x="76" y="642" class="s">• Claims: one atomic UPDATE + SKIP LOCKED, so two bots never get the same folder.</text>
 
   <!-- ============ Prefect DB ============ -->
   <rect x="900" y="110" width="660" height="400" rx="12" fill="#EEF3F7" stroke="#2E6F95" stroke-width="2"/>
@@ -140,10 +140,10 @@
   <text x="76" y="922" class="b">1,000,000</text>
   <text x="380" y="922" class="s">~7 GB</text>
   <text x="760" y="922" class="s">~45 GB</text>
-  <text x="1160" y="922" class="bad">~50 GB  move to PostgreSQL</text>
+  <text x="1160" y="922" class="bad">~50 GB  prune Prefect, archive old rows</text>
 
   <text x="60" y="966" class="b">Rule of thumb</text>
   <text x="60" y="992" class="s">App database per folder ≈ 1 KB + (images × (0.3 KB + API reply size)).   Prefect per folder ≈ 30–60 KB.</text>
   <text x="60" y="1018" class="s">Nothing is deleted automatically except bot logs (last 200) and Prefect events (7 days).</text>
-  <text x="60" y="1044" class="s">See docs/ARCHITECTURE.md, section "Keeping the databases small", for clean-up commands and when to switch to PostgreSQL.</text>
+  <text x="60" y="1044" class="s">See docs/ARCHITECTURE.md, section "Keeping the databases small", for clean-up and backup commands (make prune-prefect, pg_dump).</text>
 </svg>

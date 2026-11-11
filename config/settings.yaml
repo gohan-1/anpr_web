@@ -46,6 +46,9 @@ bots:
   max_concurrency: 64            # upper limit for a bot's concurrency setting
   stop_grace_seconds: 60         # how long a bot gets to finish its folders when stopped
   scan_every_seconds: 30         # supervisor --input: how often to look for new folders
+  use_prefect: true              # record every folder a bot processes as a Prefect flow run (needs the Prefect server)
+  help_shared_queue: true        # a bot with its own input folder also takes shared folders when it has spare room
+                                 # (its own folders always come first). false = it only ever takes its own folders
 
 reader:
   # Where vehicle folders arrive. Lower priority number = processed first.

@@ -64,6 +64,9 @@ class Image(models.Model):
     final_score = models.FloatField(null=True, blank=True)
     api_response = models.JSONField(default=dict, blank=True)
     api_error = models.TextField(blank=True)
+    # Timing (empty for images processed before timing was added):
+    duration_ms = models.PositiveIntegerField(null=True, blank=True)       # rate-limit wait + read + OCR + retries
+    api_attempts = models.PositiveSmallIntegerField(null=True, blank=True)  # OCR calls made (1 = first try)
     processed_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

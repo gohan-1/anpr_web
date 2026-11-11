@@ -11,3 +11,7 @@ frontend/dist/
 .data/
 # old SQLite export: contains password hashes
 sqlite_dump.json
+# make start: pid files and service logs
+.run/
+# make report-files output
+reports/

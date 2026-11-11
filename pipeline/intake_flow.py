@@ -1,16 +1,3 @@
-"""
-Prefect flow "scan-sources": asks every reader copy to scan, and records the result.
-
-  python -m pipeline.intake_flow            # run once
-  python -m pipeline.intake_flow --serve    # keep running, scan every scan_every_seconds
-
-Each reader copy is one Prefect task, so the Prefect dashboard shows, per copy:
-how many folders it saw, registered, skipped, how long it took, and any errors.
-The copies scan at the same time (.map), each handling its own shard.
-
-This flow only talks HTTP to the reader service; it doesn't need Django or the
-database itself. That's the microservice idea: each part does one job.
-"""
 import argparse
 
 import httpx

@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1010" viewBox="0 0 1600 1010" font-family="DejaVu Sans, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3B4650"/>
+    </marker>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2E6F95"/>
+    </marker>
+    <style>
+      .box { stroke-width: 2; }
+      .t { font-size: 21px; font-weight: 700; fill: #1D252C; }
+      .s { font-size: 15px; fill: #3B4650; }
+      .m { font-size: 14px; fill: #3B4650; font-family: DejaVu Sans Mono, monospace; }
+      .tag { font-size: 13px; font-weight: 700; fill: #FFFFFF; font-family: DejaVu Sans Mono, monospace; }
+      .lbl { font-size: 14px; font-weight: 600; fill: #1D252C; paint-order: stroke; stroke: #FFFFFF; stroke-width: 7px; stroke-linejoin: round; }
+      .lblb { font-size: 14px; font-weight: 600; fill: #2E6F95; paint-order: stroke; stroke: #FFFFFF; stroke-width: 7px; stroke-linejoin: round; }
+      .ar { stroke: #3B4650; stroke-width: 2.5; fill: none; marker-end: url(#a); }
+      .arb { stroke: #2E6F95; stroke-width: 2.5; fill: none; marker-end: url(#b); stroke-dasharray: 7 5; }
+    </style>
+  </defs>
+  <rect width="1600" height="1010" fill="#FFFFFF"/>
+  <text x="40" y="52" font-size="30" font-weight="700" fill="#1D252C">ANPR: the running services</text>
+  <text x="40" y="82" class="s">Everything inside the grey frame is started by  <tspan class="m">make start</tspan>  and stopped by  <tspan class="m">make stop</tspan>. Dark labels = service name in make.</text>
+
+  <rect x="20" y="100" width="1560" height="790" rx="16" fill="#FAFBFB" stroke="#D5DADD" stroke-dasharray="6 6"/>
+
+  <!-- row 1 -->
+  <rect class="box" x="40" y="120" width="320" height="170" rx="12" fill="#FFFFFF" stroke="#8E5BA8"/>
+  <text x="60" y="156" class="t">You (browser)</text>
+  <text x="60" y="186" class="s">Web app: results, bots</text>
+  <text x="60" y="210" class="m">127.0.0.1:5173</text>
+  <text x="60" y="242" class="s">Prefect dashboard: runs</text>
+  <text x="60" y="266" class="m">127.0.0.1:4200</text>
+
+  <rect class="box" x="440" y="120" width="340" height="170" rx="12" fill="#F6F0F8" stroke="#8E5BA8"/>
+  <rect x="664" y="132" width="100" height="24" rx="5" fill="#1D252C"/><text x="674" y="149" class="tag">frontend</text>
+  <text x="460" y="156" class="t">Web app</text>
+  <text x="460" y="182" class="m">React + Vite  :5173</text>
+  <text x="460" y="216" class="s">Pages: Overview, Folders, Bots</text>
+  <text x="460" y="240" class="s">Sends /api/… to Django</text>
+
+  <rect class="box" x="860" y="120" width="340" height="170" rx="12" fill="#F6F0F8" stroke="#8E5BA8"/>
+  <rect x="1124" y="132" width="56" height="24" rx="5" fill="#1D252C"/><text x="1134" y="149" class="tag">web</text>
+  <text x="880" y="156" class="t">Django API</text>
+  <text x="880" y="182" class="m">runserver  :8000</text>
+  <text x="880" y="216" class="s">Login (token), results,</text>
+  <text x="880" y="240" class="s">Start / Stop / Delete bots,</text>
+  <text x="880" y="264" class="s">Browse folders</text>
+
+  <!-- PostgreSQL -->
+  <rect class="box" x="1280" y="120" width="280" height="710" rx="12" fill="#EEF5F0" stroke="#2E7D4F"/>
+  <text x="1300" y="156" class="t">PostgreSQL</text>
+  <text x="1300" y="182" class="m">database anpr  :5432</text>
+  <text x="1300" y="204" class="s">(system service, not make)</text>
+  <text x="1300" y="246" class="s" font-weight="700">Bots and results</text>
+  <text x="1300" y="272" class="m">Bot, BotEvent</text>
+  <text x="1300" y="294" class="m">WorkItem  (queue)</text>
+  <text x="1300" y="316" class="m">Folder, Image</text>
+  <text x="1300" y="358" class="s" font-weight="700">Logins</text>
+  <text x="1300" y="384" class="m">User, Token</text>
+  <text x="1300" y="660" class="s" font-weight="700">Reader intake</text>
+  <text x="1300" y="686" class="m">IntakeFolder</text>
+  <text x="1300" y="708" class="m">IntakeImage</text>
+  <text x="1300" y="746" class="s">Not used by the bots</text>
+  <text x="1300" y="768" class="s">yet: separate system.</text>
+
+  <!-- row 2 -->
+  <rect class="box" x="40" y="370" width="320" height="190" rx="12" fill="#F4F1E8" stroke="#B9A86A"/>
+  <text x="60" y="406" class="t">Input folders (disk)</text>
+  <text x="60" y="436" class="m">main/data/…</text>
+  <text x="60" y="466" class="s">One folder per vehicle.</text>
+  <text x="60" y="490" class="s">Read only.</text>
+  <text x="60" y="524" class="m">data/low_accuracy/</text>
+  <text x="60" y="546" class="m">data/high_accuracy/</text>
+
+  <rect class="box" x="440" y="370" width="340" height="190" rx="12" fill="#EEF3F7" stroke="#2E6F95"/>
+  <rect x="644" y="382" width="120" height="24" rx="5" fill="#1D252C"/><text x="654" y="399" class="tag">supervisor</text>
+  <text x="460" y="406" class="t">Bot supervisor</text>
+  <text x="460" y="440" class="s">Every 30 s: queue new folders</text>
+  <text x="460" y="466" class="s">Every 2 s: start / stop /</text>
+  <text x="460" y="490" class="s">restart bots to match the</text>
+  <text x="460" y="514" class="s">Bots page. Only ONE may run.</text>
+
+  <rect class="box" x="860" y="370" width="340" height="190" rx="12" fill="#FFF7E0" stroke="#D99A00"/>
+  <text x="880" y="406" class="t">Bots</text>
+  <text x="880" y="430" class="m">run_bot bot-1, bot-2 …</text>
+  <text x="880" y="464" class="s">One process per bot.</text>
+  <text x="880" y="488" class="s">Claim folders, OCR each image</text>
+  <text x="880" y="512" class="s">(Prefect flow run per folder),</text>
+  <text x="880" y="536" class="s">save results. Heartbeat 3 s.</text>
+
+  <!-- row 3 -->
+  <rect class="box" x="40" y="640" width="320" height="190" rx="12" fill="#EEF5F0" stroke="#2E7D4F"/>
+  <rect x="254" y="652" width="86" height="24" rx="5" fill="#1D252C"/><text x="264" y="669" class="tag">reader</text>
+  <text x="60" y="676" class="t">Reader service</text>
+  <text x="60" y="702" class="m">FastAPI  :8101/docs</text>
+  <text x="60" y="736" class="s">Registers new folders:</text>
+  <text x="60" y="760" class="s">images, sizes, sha256,</text>
+  <text x="60" y="784" class="s">duplicates. No OCR.</text>
+
+  <rect class="box" x="440" y="640" width="340" height="190" rx="12" fill="#EEF3F7" stroke="#2E6F95"/>
+  <rect x="680" y="652" width="84" height="24" rx="5" fill="#1D252C"/><text x="690" y="669" class="tag">prefect</text>
+  <text x="460" y="676" class="t">Prefect server</text>
+  <text x="460" y="702" class="m">:4200  ~/.prefect/prefect.db</text>
+  <text x="460" y="736" class="s">Records flow runs.</text>
+  <rect x="460" y="752" width="304" height="62" rx="8" fill="#FFFFFF" stroke="#2E6F95"/>
+  <rect x="694" y="760" width="56" height="22" rx="5" fill="#1D252C"/><text x="702" y="776" class="tag">scan</text>
+  <text x="474" y="778" class="s">flow scan-sources</text>
+  <text x="474" y="802" class="s">every 60 s</text>
+
+  <rect class="box" x="860" y="640" width="340" height="190" rx="12" fill="#FBEFEE" stroke="#B3392F"/>
+  <text x="880" y="676" class="t">OCR API (external)</text>
+  <text x="880" y="706" class="s">Private plate recognition.</text>
+  <text x="880" y="736" class="s">Each bot logs in with its</text>
+  <text x="880" y="760" class="s">own account.</text>
+  <text x="880" y="794" class="m">api.mock: true = fake</text>
+
+  <!-- arrows row 1 -->
+  <path class="ar" d="M360,205 L436,205"/>
+  <path class="ar" d="M780,205 L856,205"/>
+  <text x="796" y="192" class="lbl">/api</text>
+  <path class="ar" d="M1200,205 L1276,205"/>
+  <text x="1210" y="192" class="lbl">SQL</text>
+
+  <!-- supervisor: data -> supervisor, supervisor -> bots, supervisor -> DB -->
+  <path class="ar" d="M360,440 L436,440"/>
+  <text x="372" y="428" class="lbl">scan</text>
+  <path class="ar" d="M780,440 L856,440"/>
+  <text x="792" y="428" class="lbl">starts</text>
+  <path class="ar" d="M610,370 L610,330 L1276,330"/>
+  <text x="640" y="322" class="lbl">queue new folders (WorkItem), read the Bots table</text>
+
+  <!-- bots -> DB, bots -> OCR, bots -> data, bots -> prefect -->
+  <path class="ar" d="M1200,470 L1276,470"/>
+  <text x="1206" y="458" class="lbl">claim,</text>
+  <text x="1206" y="496" class="lbl">save</text>
+  <path class="ar" d="M1060,560 L1060,636"/>
+  <text x="1072" y="604" class="lbl">image → plate + conf.</text>
+  <path class="ar" d="M940,560 L940,598 L200,598 L200,564"/>
+  <text x="214" y="590" class="lbl">read images</text>
+  <path class="arb" d="M900,560 C 880,610 820,640 784,690"/>
+  <text x="790" y="630" class="lblb">flow runs</text>
+
+  <!-- scan flow -> reader, reader -> data, reader -> DB -->
+  <path class="arb" d="M460,783 L364,783"/>
+  <text x="376" y="770" class="lblb">/scan</text>
+  <path class="ar" d="M150,640 L150,564"/>
+  <text x="62" y="626" class="lbl">read + hash</text>
+  <path class="ar" d="M200,830 L200,862 L1420,862 L1420,834"/>
+  <text x="560" y="868" class="lbl">register folders + images (one transaction per folder)</text>
+
+  <!-- footer -->
+  <text x="40" y="930" class="s"><tspan font-weight="700">Start / stop:</tspan>  make start · make stop · make status · make bots · make logs-&lt;name&gt; · make restart-&lt;name&gt;      <tspan font-weight="700">Logs:</tspan>  main/.run/&lt;name&gt;.log</text>
+  <text x="40" y="960" class="s"><tspan font-weight="700">Start order:</tspan>  prefect → web → reader → supervisor → scan → frontend.  Stop is the reverse; the supervisor lets bots finish their current folders first.</text>
+  <text x="40" y="990" class="s"><tspan font-weight="700">Settings:</tspan>  config/settings.yaml (restart after changes) · main/.env (database password, not in git)</text>
+</svg>

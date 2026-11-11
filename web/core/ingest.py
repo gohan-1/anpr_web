@@ -12,7 +12,9 @@ def save_folder_result(folder_path: Path, images: list[ImageAnalysis], job=None,
     Image.objects.bulk_create([
         Image(folder=folder, path=str(a.path), file_name=a.path.name, sha256="",
               plate=a.plate or "", confidence=a.confidence, final_score=a.confidence,
-              api_response=a.raw, api_error=a.error)
+              api_response=a.raw, api_error=a.error,
+              duration_ms=round(a.seconds * 1000) if a.seconds is not None else None,
+              api_attempts=a.attempts or None)
         for a in images])
 
     # Summary for the folder list: the highest-confidence read (for display only, nothing is decided).
