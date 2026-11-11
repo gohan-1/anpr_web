@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1040" viewBox="0 0 1600 1040" font-family="DejaVu Sans, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3B4650"/>
+    </marker>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2E6F95"/>
+    </marker>
+    <style>
+      .box { stroke-width: 2; rx: 12; }
+      .t { font-size: 22px; font-weight: 700; fill: #1D252C; }
+      .s { font-size: 15px; fill: #3B4650; }
+      .m { font-size: 14px; fill: #3B4650; font-family: DejaVu Sans Mono, monospace; }
+      .lbl { font-size: 15px; font-weight: 600; fill: #1D252C; paint-order: stroke; stroke: #FFFFFF; stroke-width: 7px; stroke-linejoin: round; }
+      .lblb { font-size: 15px; font-weight: 600; fill: #2E6F95; paint-order: stroke; stroke: #FFFFFF; stroke-width: 7px; stroke-linejoin: round; }
+      .ar { stroke: #3B4650; stroke-width: 2.5; fill: none; marker-end: url(#a); }
+      .arb { stroke: #2E6F95; stroke-width: 2.5; fill: none; marker-end: url(#b); stroke-dasharray: 7 5; }
+      .num { font-size: 15px; font-weight: 700; fill: #FFFFFF; }
+    </style>
+  </defs>
+  <rect width="1600" height="1040" fill="#FFFFFF"/>
+
+  <text x="40" y="52" font-size="30" font-weight="700" fill="#1D252C">ANPR: how a vehicle folder gets processed</text>
+  <text x="40" y="82" class="s">Numbers follow one folder from disk to the screen. Solid arrows = work. Dashed blue = monitoring / control.</text>
+
+  <!-- data/ -->
+  <rect class="box" x="40" y="120" width="320" height="250" fill="#F4F1E8" stroke="#B9A86A"/>
+  <text x="60" y="155" class="t">Input folders (disk)</text>
+  <text x="60" y="182" class="s">One sub-folder per vehicle</text>
+  <text x="60" y="215" class="m">main/data/</text>
+  <text x="76" y="238" class="m">ocr_4393072/</text>
+  <text x="96" y="259" class="m">entry_image.jpg</text>
+  <text x="96" y="280" class="m">exit_image.jpg  …</text>
+  <text x="76" y="303" class="m">ocr_4393075/  …</text>
+  <text x="60" y="337" class="s">Read only: images are never</text>
+  <text x="60" y="357" class="s">copied, moved or deleted.</text>
+
+  <!-- supervisor -->
+  <rect class="box" x="440" y="120" width="340" height="250" fill="#EEF3F7" stroke="#2E6F95"/>
+  <text x="460" y="155" class="t">Bot supervisor</text>
+  <text x="460" y="180" class="m">manage.py bot_supervisor</text>
+  <text x="460" y="215" class="s">• every 30 s: find new folders</text>
+  <text x="460" y="240" class="s">   and add them to the queue</text>
+  <text x="460" y="268" class="s">• start / stop / restart bots to</text>
+  <text x="460" y="291" class="s">   match the Bots page</text>
+  <text x="460" y="319" class="s">• put folders of dead bots back</text>
+  <text x="460" y="342" class="s">   in the queue</text>
+
+  <!-- DB -->
+  <rect class="box" x="860" y="120" width="340" height="250" fill="#EEF5F0" stroke="#2E7D4F"/>
+  <text x="880" y="155" class="t">App database</text>
+  <text x="880" y="180" class="m">web/db.sqlite3</text>
+  <text x="880" y="215" class="s"><tspan font-weight="700">WorkItem</tspan>  the queue (1 row / folder)</text>
+  <text x="880" y="243" class="s"><tspan font-weight="700">Bot</tspan>  settings, state, heartbeat</text>
+  <text x="880" y="271" class="s"><tspan font-weight="700">Folder</tspan>  result per vehicle folder</text>
+  <text x="880" y="299" class="s"><tspan font-weight="700">Image</tspan>  plate, confidence, API reply</text>
+  <text x="880" y="327" class="s"><tspan font-weight="700">BotEvent</tspan>  bot log (last 200)</text>
+  <text x="880" y="355" class="s"><tspan font-weight="700">User / Token</tspan>  logins</text>
+
+  <!-- web app -->
+  <rect class="box" x="1280" y="120" width="280" height="250" fill="#F6F0F8" stroke="#8E5BA8"/>
+  <text x="1300" y="155" class="t">Web app</text>
+  <text x="1300" y="180" class="m">React :5173</text>
+  <text x="1300" y="200" class="m">Django API :8000</text>
+  <text x="1300" y="235" class="s">• Bots: start, stop, input</text>
+  <text x="1300" y="256" class="s">   folder (Browse…)</text>
+  <text x="1300" y="284" class="s">• Folders: OCR results</text>
+  <text x="1300" y="312" class="s">• Overview: charts</text>
+  <text x="1300" y="345" class="s">You log in here</text>
+
+  <!-- OCR API -->
+  <rect class="box" x="40" y="520" width="320" height="200" fill="#FBEFEE" stroke="#B3392F"/>
+  <text x="60" y="555" class="t">OCR API (external)</text>
+  <text x="60" y="582" class="s">Private plate-recognition service</text>
+  <text x="60" y="615" class="s">Gets: one image + bot's login</text>
+  <text x="60" y="640" class="s">Returns: plate, confidence, raw JSON</text>
+  <text x="60" y="672" class="s">Retries ×3, rate limit per bot</text>
+  <text x="60" y="697" class="m">api.mock: true = fake replies</text>
+
+  <!-- bots -->
+  <rect class="box" x="440" y="480" width="340" height="280" fill="#FFF7E0" stroke="#D99A00"/>
+  <text x="460" y="515" class="t">Bots (1 process each)</text>
+  <text x="460" y="540" class="m">manage.py run_bot bot-1</text>
+  <rect x="460" y="555" width="300" height="190" rx="8" fill="#FFFFFF" stroke="#D99A00" stroke-dasharray="4 4"/>
+  <text x="476" y="582" class="s" font-weight="700">For each claimed folder:</text>
+  <text x="476" y="608" class="s">Prefect flow run  "bot-1: ocr_…"</text>
+  <text x="492" y="632" class="s">└ task per image: call OCR API</text>
+  <text x="476" y="662" class="s">Up to 4 folders at once</text>
+  <text x="476" y="684" class="s">(concurrency), 8 images in parallel</text>
+  <text x="476" y="714" class="s">Heartbeat every 3 s</text>
+  <text x="476" y="736" class="s">Only DB writes in main thread</text>
+
+  <!-- prefect -->
+  <rect class="box" x="860" y="520" width="340" height="200" fill="#EEF3F7" stroke="#2E6F95"/>
+  <text x="880" y="555" class="t">Prefect server</text>
+  <text x="880" y="580" class="m">prefect server start  :4200</text>
+  <text x="880" y="613" class="s">Records every flow run, task run,</text>
+  <text x="880" y="636" class="s">state change and log line</text>
+  <text x="880" y="669" class="m">~/.prefect/prefect.db</text>
+  <text x="880" y="694" class="s">Monitoring only: not the queue</text>
+
+  <!-- prefect UI -->
+  <rect class="box" x="1280" y="520" width="280" height="200" fill="#F6F0F8" stroke="#8E5BA8"/>
+  <text x="1300" y="555" class="t">Prefect dashboard</text>
+  <text x="1300" y="580" class="m">127.0.0.1:4200</text>
+  <text x="1300" y="615" class="s">Runs per folder, tasks</text>
+  <text x="1300" y="638" class="s">per image, logs, timing</text>
+  <text x="1300" y="671" class="s">Filter by tag</text>
+  <text x="1300" y="694" class="m">bot:bot-1</text>
+
+  <!-- arrows -->
+  <path class="ar" d="M360,220 L436,220"/>
+  <circle cx="398" cy="196" r="13" fill="#1D252C"/><text x="393" y="201" class="num">1</text>
+  <text x="372" y="245" class="lbl">scan</text>
+
+  <path class="ar" d="M780,220 L856,220"/>
+  <circle cx="818" cy="196" r="13" fill="#1D252C"/><text x="813" y="201" class="num">2</text>
+  <text x="790" y="245" class="lbl">queue</text>
+
+  <path class="ar" d="M610,370 L610,476"/>
+  <text x="622" y="428" class="lbl">starts bots</text>
+
+  <path class="ar" d="M780,520 C 840,470 880,430 940,374"/>
+  <circle cx="842" cy="460" r="13" fill="#1D252C"/><text x="837" y="465" class="num">3</text>
+  <text x="862" y="452" class="lbl">claim a folder</text>
+
+  <path class="ar" d="M460,480 C 400,440 330,410 300,374"/>
+  <circle cx="378" cy="438" r="13" fill="#1D252C"/><text x="373" y="443" class="num">4</text>
+  <text x="250" y="470" class="lbl">read images</text>
+
+  <path class="ar" d="M440,620 L364,620"/>
+  <circle cx="402" cy="596" r="13" fill="#1D252C"/><text x="397" y="601" class="num">5</text>
+  <text x="372" y="648" class="lbl">send</text>
+
+  <path class="ar" d="M364,690 L440,690"/>
+  <text x="378" y="715" class="lbl">reply</text>
+
+  <path class="ar" d="M780,740 L820,740 L820,790 L1240,790 L1240,340 L1204,340" />
+  <circle cx="880" cy="790" r="13" fill="#1D252C"/><text x="875" y="795" class="num">6</text>
+  <text x="902" y="816" class="lbl">save results (Folder + Image rows), mark WorkItem done</text>
+
+  <path class="arb" d="M780,600 L856,600"/>
+  <text x="790" y="588" class="lblb">report</text>
+  <text x="798" y="624" class="lblb">runs</text>
+
+  <path class="arb" d="M1200,620 L1276,620"/>
+
+  <path class="arb" d="M1280,200 L1204,200"/>
+  <circle cx="1242" cy="176" r="13" fill="#2E6F95"/><text x="1237" y="181" class="num">7</text>
+  <text x="1214" y="226" class="lblb">read,</text>
+  <text x="1210" y="246" class="lblb">control</text>
+
+  <!-- steps -->
+  <rect x="40" y="830" width="1520" height="180" rx="12" fill="#F7F8F8" stroke="#D5DADD"/>
+  <text x="60" y="862" font-size="18" font-weight="700" fill="#1D252C">The steps</text>
+  <text x="60" y="892" class="s"><tspan font-weight="700">1</tspan> Supervisor scans each bot's input folder and the default data/ folder every 30 s.</text>
+  <text x="60" y="918" class="s"><tspan font-weight="700">2</tspan> Each new vehicle folder becomes one WorkItem row (pending). A bot's own folder is assigned to that bot; others are shared.</text>
+  <text x="60" y="944" class="s"><tspan font-weight="700">3</tspan> A bot claims pending rows atomically (two bots never get the same folder).  <tspan font-weight="700">4–5</tspan> It reads each image and sends it to the OCR API inside a Prefect flow run.</text>
+  <text x="60" y="970" class="s"><tspan font-weight="700">6</tspan> Results are saved: 1 Folder row + 1 Image row per image; the WorkItem becomes done (failed after 3 tries).</text>
+  <text x="60" y="996" class="s"><tspan font-weight="700">7</tspan> The web app reads results and writes your Start / Stop / input-folder choices to the Bot table, which the supervisor follows.</text>
+</svg>

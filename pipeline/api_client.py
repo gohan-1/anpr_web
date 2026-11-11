@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import random
+import time
 from pathlib import Path
 
 import httpx
@@ -28,14 +29,21 @@ def parse_response(data: dict) -> tuple[str | None, float | None]:
     return best.get("plate"), conf
 
 
-def recognize(path: Path, cfg: dict) -> dict:
-    """Send one image. Raises on network/HTTP errors so Prefect can retry."""
+def recognize(path: Path, cfg: dict, credentials: tuple[str, str] | None = None) -> dict:
+    """Send one image. Raises on network/HTTP errors so the caller can retry.
+
+    credentials: (username, password) of the bot's own API account. When given, it's
+    sent as HTTP Basic auth. ADAPT this if your API logs in differently (e.g. a token).
+    """
     if cfg.get("mock"):
+        time.sleep(cfg.get("mock_latency_seconds", 0))
         return _mock_response(path)
 
-    headers = {"Authorization": f"Token {cfg['api_key']}"} if cfg.get("api_key") else {}
+    headers = {"Authorization": f"Token {cfg['api_key']}"} if cfg.get("api_key") and not credentials else {}
+    auth = httpx.BasicAuth(*credentials) if credentials else None
     with open(path, "rb") as f:
-        resp = httpx.post(cfg["url"], files={"upload": f}, headers=headers, timeout=cfg["timeout_seconds"])
+        resp = httpx.post(cfg["url"], files={"upload": f}, headers=headers, auth=auth,
+                          timeout=cfg["timeout_seconds"])
     resp.raise_for_status()
     data = resp.json()
     plate, conf = parse_response(data)

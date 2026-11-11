@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+web/db.sqlite3
+output/
+# vehicle images (input folders)
+data/
+.venv/
+.env
+frontend/node_modules/
+frontend/dist/
+.data/
+# old SQLite export: contains password hashes
+sqlite_dump.json

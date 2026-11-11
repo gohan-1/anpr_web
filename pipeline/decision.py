@@ -4,13 +4,12 @@ Decision engine: pure logic, no files, no API, no database.
 Input:  every image result for ONE folder.
 Output: one Decision (route + scenario code + reason).
 
-Image quality is not judged locally: the OCR API's confidence is the score.
-
 Scenario codes
-  S1  single image read with high confidence         -> accepted
-  S2  some images unread, one confident read decided -> accepted
+  S1  single clear image, high confidence            -> accepted
+  S2  blurry image(s) present, a clear one decided   -> accepted
   S3  several images agree on the same plate         -> accepted
   S4  different plates with high confidence          -> review
+  S5  high confidence but only low-quality images    -> review
   S6  no plate detected in any image                 -> no_plate
   S7  plate found but score too low                  -> review
   S8  plate text fails format check                  -> review
@@ -36,6 +35,7 @@ class Route(str, Enum):
 @dataclass
 class ImageResult:
     image_id: str
+    quality: float | None = None      # 0..1, None if not computed
     plate: str | None = None
     confidence: float | None = None   # 0..1 from the API
     error: str | None = None          # API error message, if any
@@ -45,9 +45,13 @@ class ImageResult:
 
 @dataclass
 class Thresholds:
+    weight_confidence: float = 0.7
+    weight_quality: float = 0.3
     accept_score: float = 0.85
     review_floor: float = 0.60
+    high_confidence: float = 0.90
     conflict_confidence: float = 0.80
+    min_quality: float = 0.40
     consensus_boost: float = 0.03
     max_consensus_boost: float = 0.09
     plate_regex: str = r"^[A-Z0-9]{4,10}$"
@@ -76,9 +80,9 @@ def normalize_plate(text: str | None) -> str | None:
     return cleaned or None
 
 
-def image_score(r: ImageResult, t: Thresholds | None = None) -> float:
-    """Per-image score is simply the OCR API's confidence (0..1)."""
-    return round(r.confidence or 0.0, 4)
+def image_score(r: ImageResult, t: Thresholds) -> float:
+    quality = r.quality if r.quality is not None else 0.5  # unknown = neutral
+    return round(t.weight_confidence * (r.confidence or 0.0) + t.weight_quality * quality, 4)
 
 
 def decide(results: list[ImageResult], t: Thresholds | None = None) -> Decision:
@@ -122,8 +126,9 @@ def decide(results: list[ImageResult], t: Thresholds | None = None) -> Decision:
             "max_confidence": max(r.confidence for r in rs),
         }
 
-    # S4: conflict - several different plates read with high confidence
-    strong = [p for p, rs in groups.items() if any(r.confidence >= t.conflict_confidence for r in rs)]
+    # S4: conflict - several different plates read with high confidence on decent images
+    strong = [p for p, rs in groups.items()
+              if any(r.confidence >= t.conflict_confidence and (r.quality or 0) >= t.min_quality for r in rs)]
     if len(strong) > 1:
         return Decision(Route.REVIEW, "S4", f"Conflicting plates with high confidence: {', '.join(sorted(strong))}",
                         candidates=candidates)
@@ -136,17 +141,23 @@ def decide(results: list[ImageResult], t: Thresholds | None = None) -> Decision:
     if not re.match(t.plate_regex, winner):
         return Decision(Route.REVIEW, "S8", f"Plate '{winner}' does not match expected format", **base)
 
+    # S5: high confidence but every supporting image is low quality
+    supporting = groups[winner]
+    if info["max_confidence"] >= t.high_confidence and all((r.quality or 0) < t.min_quality for r in supporting):
+        return Decision(Route.REVIEW, "S5",
+                        f"High API confidence ({info['max_confidence']:.2f}) but all images are low quality", **base)
+
     # S7: score too low to trust automatically
     if info["final_score"] < t.accept_score:
         level = "low" if info["final_score"] < t.review_floor else "medium"
-        return Decision(Route.REVIEW, "S7", f"Score {info['final_score']:.2f} is {level}; needs human check", **base)
+        return Decision(Route.REVIEW, "S7", f"Score {info['final_score']:.3f} is {level} (auto-accept needs {t.accept_score:.2f}); needs human check", **base)
 
     # Accepted: work out which positive scenario applied
-    unread = [r for r in answered if r not in groups[winner] and not normalize_plate(r.plate)]
+    blurry = [r for r in usable if r.quality is not None and r.quality < t.min_quality]
     note = f" (API failed on {len(errored)} image(s))" if errored else ""
     if info["count"] > 1:
         return Decision(Route.ACCEPTED, "S3", f"{info['count']} images agree on {winner}{note}", **base)
-    if unread:
+    if blurry:
         return Decision(Route.ACCEPTED, "S2",
-                        f"No plate read in {len(unread)} image(s); confident read decided{note}", **base)
-    return Decision(Route.ACCEPTED, "S1", f"Single confident read, score {info['final_score']:.2f}{note}", **base)
+                        f"{len(blurry)} low-quality image(s) ignored; clear image decided{note}", **base)
+    return Decision(Route.ACCEPTED, "S1", f"Clear image, score {info['final_score']:.2f}{note}", **base)

@@ -12,12 +12,57 @@ api:
   retries: 3
   retry_delay_seconds: 5
   mock: true                 # true = fake responses for local testing, no real API calls
+  mock_latency_seconds: 0.3  # mock only: pretend each call takes this long, like a real API
 
+quality:
+  blur_reference: 150.0      # Laplacian variance treated as "fully sharp"
+  min_side_px: 300           # images smaller than this lose resolution score
+  weights: {blur: 0.6, brightness: 0.2, resolution: 0.2}
 
 decision:
-  accept_score: 0.85         # API confidence (+ consensus boost) needed for auto-accept
+  weight_confidence: 0.7     # final_score = 0.7*api_conf + 0.3*quality
+  weight_quality: 0.3
+  accept_score: 0.85         # final score needed for auto-accept
   review_floor: 0.60         # below this = low-confidence review
+  high_confidence: 0.90      # API conf considered "high"
   conflict_confidence: 0.80  # two different plates above this = conflict
+  min_quality: 0.40          # images below this count as low quality / blurry
   consensus_boost: 0.03      # added per extra image agreeing on the same plate
   max_consensus_boost: 0.09
   plate_regex: "^[A-Z0-9]{4,10}$"   # replace with your country's plate format
+
+processing:
+  max_parallel_images: 16        # how many images are processed at the same time
+  max_requests_per_second: 0     # cap on calls to the plate API (0 = no cap). Set this to your API's limit!
+  chunk_size: 200                # folders handled per batch, keeps memory steady with huge data
+  watch_interval_seconds: 60     # bot mode: how often to look for new folders
+  min_folder_age_seconds: 30     # bot mode: skip folders still being written by the camera
+
+bots:
+  heartbeat_seconds: 3           # how often each bot reports in
+  stale_after_seconds: 30        # no heartbeat for this long = bot is considered dead
+  claim_timeout_seconds: 600     # a folder claimed longer than this goes back to the queue
+  max_attempts: 3                # a folder that keeps crashing a bot is marked failed after this
+  max_concurrency: 64            # upper limit for a bot's concurrency setting
+  stop_grace_seconds: 60         # how long a bot gets to finish its folders when stopped
+  scan_every_seconds: 30         # supervisor --input: how often to look for new folders
+
+reader:
+  # Where vehicle folders arrive. Lower priority number = processed first.
+  sources:
+    - name: low-accuracy
+      path: ./data/low_accuracy
+      accuracy: low
+      priority: 1
+    - name: high-accuracy
+      path: ./data/high_accuracy
+      accuracy: high
+      priority: 2
+  image_extensions: [".jpg", ".jpeg", ".png", ".bmp"]
+  min_folder_age_seconds: 30    # skip folders changed this recently (camera still writing)
+  read_workers: 8               # folders read at the same time inside one reader copy
+  # Every running reader copy. The scan-sources flow asks each of them to scan.
+  instances:
+    - http://127.0.0.1:8101
+  scan_timeout_seconds: 900
+  scan_every_seconds: 60        # when the scan flow runs on a schedule (--serve)

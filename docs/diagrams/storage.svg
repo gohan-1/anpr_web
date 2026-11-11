@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" font-family="DejaVu Sans, Arial, sans-serif">
+  <defs>
+    <style>
+      .t { font-size: 22px; font-weight: 700; fill: #1D252C; }
+      .h { font-size: 14px; font-weight: 700; fill: #5B6670; }
+      .s { font-size: 15px; fill: #3B4650; }
+      .b { font-size: 15px; font-weight: 700; fill: #1D252C; }
+      .m { font-size: 14px; fill: #3B4650; font-family: DejaVu Sans Mono, monospace; }
+      .ok { font-size: 15px; fill: #2E7D4F; font-weight: 600; }
+      .warn { font-size: 15px; fill: #A86F00; font-weight: 600; }
+      .bad { font-size: 15px; fill: #B3392F; font-weight: 600; }
+    </style>
+  </defs>
+  <rect width="1600" height="1100" fill="#FFFFFF"/>
+  <text x="40" y="52" font-size="30" font-weight="700" fill="#1D252C">ANPR: where data is stored and how it grows</text>
+  <text x="40" y="82" class="s">Two SQLite databases and the image folders. Sizes are estimates for planning; measure on your real data.</text>
+
+  <!-- ============ App DB ============ -->
+  <rect x="40" y="110" width="820" height="560" rx="12" fill="#EEF5F0" stroke="#2E7D4F" stroke-width="2"/>
+  <text x="60" y="146" class="t">App database</text>
+  <text x="250" y="146" class="m">main/web/db.sqlite3</text>
+  <text x="60" y="172" class="s">Written by bots and supervisor, read by the web app. The source of truth.</text>
+
+  <rect x="60" y="188" width="780" height="34" fill="#DCEBE1"/>
+  <text x="72" y="210" class="h">TABLE</text>
+  <text x="200" y="210" class="h">ONE ROW PER</text>
+  <text x="400" y="210" class="h">SIZE / ROW</text>
+  <text x="555" y="210" class="h">CLEANED UP?</text>
+
+  <g>
+    <text x="72" y="250" class="b">Image</text>
+    <text x="200" y="250" class="s">image sent to API</text>
+    <text x="400" y="250" class="s">~0.3 KB + reply</text>
+    <text x="555" y="250" class="bad">Never. Biggest table.</text>
+    <text x="555" y="270" class="s">Stores the full API JSON reply.</text>
+    <line x1="60" y1="282" x2="840" y2="282" stroke="#C9DCCF"/>
+
+    <text x="72" y="308" class="b">Folder</text>
+    <text x="200" y="308" class="s">vehicle folder done</text>
+    <text x="400" y="308" class="s">~0.5 KB</text>
+    <text x="555" y="308" class="bad">Never.</text>
+    <line x1="60" y1="322" x2="840" y2="322" stroke="#C9DCCF"/>
+
+    <text x="72" y="348" class="b">WorkItem</text>
+    <text x="200" y="348" class="s">folder found (queue)</text>
+    <text x="400" y="348" class="s">~0.3 KB</text>
+    <text x="555" y="348" class="bad">Never.</text>
+    <text x="555" y="368" class="s">Also how a folder is never done twice.</text>
+    <line x1="60" y1="380" x2="840" y2="380" stroke="#C9DCCF"/>
+
+    <text x="72" y="406" class="b">BotEvent</text>
+    <text x="200" y="406" class="s">bot log line</text>
+    <text x="400" y="406" class="s">~0.2 KB</text>
+    <text x="555" y="406" class="ok">Yes: last 200 per bot kept.</text>
+    <line x1="60" y1="420" x2="840" y2="420" stroke="#C9DCCF"/>
+
+    <text x="72" y="446" class="b">Bot</text>
+    <text x="200" y="446" class="s">bot</text>
+    <text x="400" y="446" class="s">tiny</text>
+    <text x="555" y="446" class="ok">Deleted when you remove the bot.</text>
+    <line x1="60" y1="460" x2="840" y2="460" stroke="#C9DCCF"/>
+
+    <text x="72" y="486" class="b">User, Token</text>
+    <text x="200" y="486" class="s">login</text>
+    <text x="400" y="486" class="s">tiny</text>
+    <text x="555" y="486" class="ok">Token deleted on logout.</text>
+    <line x1="60" y1="500" x2="840" y2="500" stroke="#C9DCCF"/>
+
+    <text x="72" y="526" class="b">Job</text>
+    <text x="200" y="526" class="s">old flows.py run</text>
+    <text x="400" y="526" class="s">tiny</text>
+    <text x="555" y="526" class="s">Not used by bots.</text>
+  </g>
+
+  <rect x="60" y="548" width="780" height="104" rx="8" fill="#FFFFFF" stroke="#C9DCCF"/>
+  <text x="76" y="574" class="b">How many writers at once?</text>
+  <text x="76" y="598" class="s">• WAL mode: the web app can read while a bot writes.</text>
+  <text x="76" y="620" class="s">• Each bot writes only from its main thread; 20 s wait if the database is busy.</text>
+  <text x="76" y="642" class="s">• Queue claims are one atomic UPDATE, so two bots never get the same folder.</text>
+
+  <!-- ============ Prefect DB ============ -->
+  <rect x="900" y="110" width="660" height="400" rx="12" fill="#EEF3F7" stroke="#2E6F95" stroke-width="2"/>
+  <text x="920" y="146" class="t">Prefect database</text>
+  <text x="1140" y="146" class="m">~/.prefect/prefect.db</text>
+  <text x="920" y="172" class="s">Written by the Prefect server. History for the Prefect dashboard only.</text>
+
+  <rect x="920" y="188" width="620" height="34" fill="#D9E6EF"/>
+  <text x="932" y="210" class="h">WHAT</text>
+  <text x="1090" y="210" class="h">PER FOLDER</text>
+  <text x="1260" y="210" class="h">CLEANED UP?</text>
+
+  <text x="932" y="250" class="b">Flow run</text>
+  <text x="1090" y="250" class="s">1</text>
+  <text x="1260" y="250" class="bad">Never (until you delete)</text>
+  <text x="932" y="282" class="b">Task runs</text>
+  <text x="1090" y="282" class="s">1 per image</text>
+  <text x="1260" y="282" class="bad">Never (until you delete)</text>
+  <text x="932" y="314" class="b">States, logs</text>
+  <text x="1090" y="314" class="s">~3 per run</text>
+  <text x="1260" y="314" class="bad">Never (until you delete)</text>
+  <text x="932" y="346" class="b">Events</text>
+  <text x="1090" y="346" class="s">10–20</text>
+  <text x="1260" y="346" class="ok">Yes: after 7 days</text>
+
+  <rect x="920" y="370" width="620" height="122" rx="8" fill="#FFFFFF" stroke="#C6D7E3"/>
+  <text x="936" y="398" class="b">Measured: ~30–60 KB per folder</text>
+  <text x="936" y="422" class="s">That is about 10× the app database. With Prefect on,</text>
+  <text x="936" y="444" class="s">this file is what fills the disk first.</text>
+  <text x="936" y="472" class="s">Turn off with <tspan font-family="DejaVu Sans Mono, monospace" font-size="14">bots.use_prefect: false</tspan></text>
+
+  <!-- ============ Disk ============ -->
+  <rect x="900" y="540" width="660" height="130" rx="12" fill="#F4F1E8" stroke="#B9A86A" stroke-width="2"/>
+  <text x="920" y="576" class="t">Image files</text>
+  <text x="1080" y="576" class="m">main/data/…</text>
+  <text x="920" y="606" class="s">Read only. Not copied into any database: the Image row</text>
+  <text x="920" y="628" class="s">stores only the file path. The web app streams the file</text>
+  <text x="920" y="650" class="s">from disk when you open it. Deleting images breaks previews.</text>
+
+  <!-- ============ Growth ============ -->
+  <rect x="40" y="700" width="1520" height="370" rx="12" fill="#F7F8F8" stroke="#D5DADD"/>
+  <text x="60" y="736" class="t">How big does it get?</text>
+  <text x="60" y="762" class="s">Assumes 5 images per folder and an OCR reply of about 1 KB of JSON per image (the mock reply is 54 bytes).</text>
+
+  <rect x="60" y="780" width="1480" height="34" fill="#E9ECEE"/>
+  <text x="76" y="802" class="h">FOLDERS PROCESSED</text>
+  <text x="380" y="802" class="h">APP DATABASE (~7 KB / folder)</text>
+  <text x="760" y="802" class="h">PREFECT DATABASE (~45 KB / folder)</text>
+  <text x="1160" y="802" class="h">TOTAL</text>
+
+  <text x="76" y="842" class="b">10,000</text>
+  <text x="380" y="842" class="s">~70 MB</text>
+  <text x="760" y="842" class="s">~450 MB</text>
+  <text x="1160" y="842" class="ok">~0.5 GB  fine</text>
+  <line x1="60" y1="856" x2="1540" y2="856" stroke="#D5DADD"/>
+  <text x="76" y="882" class="b">100,000</text>
+  <text x="380" y="882" class="s">~700 MB</text>
+  <text x="760" y="882" class="s">~4.5 GB</text>
+  <text x="1160" y="882" class="warn">~5 GB  clean up Prefect</text>
+  <line x1="60" y1="896" x2="1540" y2="896" stroke="#D5DADD"/>
+  <text x="76" y="922" class="b">1,000,000</text>
+  <text x="380" y="922" class="s">~7 GB</text>
+  <text x="760" y="922" class="s">~45 GB</text>
+  <text x="1160" y="922" class="bad">~50 GB  move to PostgreSQL</text>
+
+  <text x="60" y="966" class="b">Rule of thumb</text>
+  <text x="60" y="992" class="s">App database per folder ≈ 1 KB + (images × (0.3 KB + API reply size)).   Prefect per folder ≈ 30–60 KB.</text>
+  <text x="60" y="1018" class="s">Nothing is deleted automatically except bot logs (last 200) and Prefect events (7 days).</text>
+  <text x="60" y="1044" class="s">See docs/ARCHITECTURE.md, section "Keeping the databases small", for clean-up commands and when to switch to PostgreSQL.</text>
+</svg>
