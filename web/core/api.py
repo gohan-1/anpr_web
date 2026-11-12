@@ -6,7 +6,6 @@ The pattern is always the same:
   2. query the database with the ORM
   3. return a Response, which DRF turns into JSON
 """
-import os
 from pathlib import Path
 
 from django.contrib.auth import authenticate
@@ -26,52 +25,6 @@ from pipeline.config import load_config
 from .models import Folder, Image, Job, Route
 from .serializers import (FolderDetailSerializer, FolderListSerializer, JobSerializer,ReviewActionSerializer)
 from .services import ReviewError, apply_review
-
-# ---------------------------------------------------------------- folder browser
-MAX_BROWSE_ENTRIES = 2000
-
-
-def _browse_roots() -> list[Path]:
-    from .queue import resolve_dir
-    roots = load_config()["paths"].get("browse_roots") or [load_config()["paths"]["input_dir"]]
-    return [r for r in (resolve_dir(str(x)) for x in roots) if r.is_dir()]
-
-
-@api_view(["GET"])
-def browse(request):
-    """GET /api/browse/?path=  ->  the sub-folders of `path` (only inside paths.browse_roots).
-
-    No path = the list of roots. Used by the "Browse" button when choosing a bot's input folder.
-    """
-    from .queue import resolve_dir
-    roots = _browse_roots()
-    raw = request.query_params.get("path", "").strip()
-    if not raw:
-        return Response({"path": "", "parent": None, "roots": [str(r) for r in roots],
-                         "dirs": [{"name": str(r), "path": str(r)} for r in roots], "truncated": False})
-    path = resolve_dir(raw)
-    root = next((r for r in roots if path == r or path.is_relative_to(r)), None)
-    if root is None:
-        return Response({"detail": "That folder is outside the allowed browse folders "
-                                   "(paths.browse_roots in settings.yaml)."}, status=status.HTTP_403_FORBIDDEN)
-    if not path.is_dir():
-        return Response({"detail": f"{path} does not exist."}, status=status.HTTP_404_NOT_FOUND)
-    dirs = []
-    try:
-        with os.scandir(path) as entries:
-            for e in entries:
-                if e.name.startswith(".") or not e.is_dir(follow_symlinks=True):
-                    continue
-                dirs.append({"name": e.name, "path": str(Path(e.path).resolve())})
-                if len(dirs) >= MAX_BROWSE_ENTRIES:
-                    break
-    except PermissionError:
-        return Response({"detail": f"No permission to read {path}."}, status=status.HTTP_403_FORBIDDEN)
-    dirs.sort(key=lambda d: d["name"].lower())
-    return Response({"path": str(path), "parent": None if path == root else str(path.parent),
-                     "roots": [str(r) for r in roots], "dirs": dirs,
-                     "truncated": len(dirs) >= MAX_BROWSE_ENTRIES})
-
 
 ROUTE_KEYS = [Route.PROCESSED, Route.ACCEPTED, Route.REVIEW, Route.NO_PLATE, Route.FAILED]
 
@@ -101,6 +54,15 @@ def me(request):
 
 
 # ---------------------------------------------------------------- dashboard
+@api_view(["GET"])
+@permission_classes([AllowAny])            # the login page shows this too
+def environment(request):
+    """Which environment and database this server is connected to (never the password)."""
+    from django.conf import settings
+    return Response({"env": settings.ANPR_ENV, "read_only": settings.READ_ONLY,
+                     "database": settings.DATABASE_LABEL})
+
+
 @api_view(["GET"])
 def stats(request):
     """Everything the dashboard charts need, in one request."""

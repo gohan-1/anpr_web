@@ -75,7 +75,8 @@ class Image(models.Model):
 
 # ============================================================================ bots
 class Bot(models.Model):
-    """One worker process that takes folders from the queue and calls the plate API.
+    """One worker process of the assembly line. Every bot belongs to ONE stage
+    (reader, preprocess, ocr, llm or trip) and only takes items from that stage's line.
 
     The supervisor reads this table: desired_running=True means "this bot should be
     running", and the bot itself reports its real state with a heartbeat.
@@ -88,12 +89,20 @@ class Bot(models.Model):
         STOPPING = "stopping", "Stopping"
         CRASHED = "crashed", "Crashed"
 
+    class Stage(models.TextChoices):
+        READER = "reader", "Reading"
+        PREPROCESS = "preprocess", "Preprocessing"
+        OCR = "ocr", "OCR"
+        LLM = "llm", "LLM"
+        TRIP = "trip", "Trip"
+
     name = models.SlugField(max_length=50, unique=True)   # letters, numbers, - and _ only
-    api_username = models.CharField(max_length=150)
-    api_password_encrypted = models.TextField()            # never stored as plain text
-    concurrency = models.PositiveSmallIntegerField(default=4)   # folders worked on at once
-    rate_limit = models.FloatField(default=0)              # API calls per second, 0 = no limit
-    input_dir = models.CharField(max_length=500, blank=True)  # folder this bot watches; "" = shared default queue
+    stage = models.CharField(max_length=12, choices=Stage.choices, default=Stage.OCR, db_index=True)
+    shard = models.CharField(max_length=10, blank=True)   # reader bots only, e.g. "2/3"; set by the supervisor
+    # The bot's own account for the outside service its stage calls (the OCR API for OCR bots).
+    api_username = models.CharField(max_length=150, blank=True)
+    api_password_encrypted = models.TextField(blank=True)  # never stored as plain text
+    rate_limit = models.FloatField(default=0)              # API calls per second for this bot, 0 = no limit
 
     # What we WANT (set from React)
     desired_running = models.BooleanField(default=False)
@@ -105,7 +114,7 @@ class Bot(models.Model):
     host = models.CharField(max_length=255, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     last_heartbeat = models.DateTimeField(null=True, blank=True)
-    current_task = models.TextField(blank=True)            # folders being worked on right now
+    current_task = models.TextField(blank=True)            # what it is doing right now
     processed = models.PositiveIntegerField(default=0)
     failed = models.PositiveIntegerField(default=0)
     last_error = models.TextField(blank=True)
@@ -135,44 +144,28 @@ class BotEvent(models.Model):
         ordering = ["-created_at"]
 
 
-class WorkItem(models.Model):
-    """One folder waiting in (or done with) the queue."""
-
-    class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        IN_PROGRESS = "in_progress", "In progress"
-        DONE = "done", "Done"
-        FAILED = "failed", "Failed"
-
-    path = models.CharField(max_length=500, unique=True)   # unique: a folder is queued only once
-    status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING, db_index=True)
-    bot = models.ForeignKey(Bot, null=True, blank=True, on_delete=models.SET_NULL, related_name="items")
-    # Only this bot may take the folder. Empty = any bot without its own input folder.
-    assigned_bot = models.ForeignKey(Bot, null=True, blank=True, on_delete=models.SET_NULL,
-                                     related_name="assigned_items")
-    bot_name = models.CharField(max_length=50, blank=True)    # kept even if the bot is deleted
-    attempts = models.PositiveSmallIntegerField(default=0)
-    claimed_at = models.DateTimeField(null=True, blank=True)
-    finished_at = models.DateTimeField(null=True, blank=True, db_index=True)
-    last_error = models.TextField(blank=True)
-    folder = models.OneToOneField(Folder, null=True, blank=True, on_delete=models.SET_NULL)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.path} ({self.status})"
-
-
-# ============================================================================ intake (reader service)
+# ============================================================================ intake + assembly line
 class IntakeFolder(models.Model):
-    """One vehicle folder found by the reader service, waiting to be processed.
+    """One vehicle folder found by a reader bot.
 
-    The reader only REGISTERS folders. Later stages (the Prefect flow) pick them up
-    in priority order: lower number first, so low-accuracy sources go before high.
+    Its `stage` says where it is on the assembly line:
+      reading       its images are still being preprocessed / read by OCR
+      needs_llm     OCR finished; only 2 of 4 engines agreed, so the LLM decides
+      llm_running   an LLM bot is working on it
+      needs_trip    the plate is decided; a trip must be created
+      trip_running  a trip bot is working on it
+      manual        a person must check it on the Review page
+      done          trip created
+      failed        it kept failing and was given up
     """
 
-    class Status(models.TextChoices):
-        NEW = "new", "New"                      # registered, waiting for the pipeline
-        PROCESSING = "processing", "Processing"
+    class Stage(models.TextChoices):
+        READING = "reading", "Images in progress"
+        NEEDS_LLM = "needs_llm", "Waiting for LLM"
+        LLM_RUNNING = "llm_running", "LLM working"
+        NEEDS_TRIP = "needs_trip", "Waiting for trip"
+        TRIP_RUNNING = "trip_running", "Trip being created"
+        MANUAL = "manual", "Manual review"
         DONE = "done", "Done"
         FAILED = "failed", "Failed"
 
@@ -184,25 +177,51 @@ class IntakeFolder(models.Model):
     name = models.CharField(max_length=255, db_index=True)
     source = models.CharField(max_length=100, db_index=True)  # which configured source it came from
     accuracy = models.CharField(max_length=4, choices=Accuracy.choices)
-    priority = models.PositiveSmallIntegerField(db_index=True)
-    status = models.CharField(max_length=12, choices=Status.choices, default=Status.NEW, db_index=True)
+    priority = models.PositiveSmallIntegerField(db_index=True)  # lower = first (low accuracy before high)
+    stage = models.CharField(max_length=12, choices=Stage.choices, default=Stage.READING, db_index=True)
+    # queue bookkeeping, used while an LLM or trip bot holds the folder
+    taken_by = models.CharField(max_length=50, blank=True)
+    taken_at = models.DateTimeField(null=True, blank=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    last_error = models.TextField(blank=True)
+    failed_in = models.CharField(max_length=12, blank=True)       # stage it failed in (for "Retry")
+    route_reason = models.CharField(max_length=255, blank=True)   # why it went to trip / llm / manual
+    # OCR result of the folder: the highest-confidence plate any of its images gave
+    plate = models.CharField(max_length=20, blank=True)
+    confidence = models.FloatField(null=True, blank=True)
+    read_at = models.DateTimeField(null=True, blank=True)    # when its last image was through OCR
     image_count = models.PositiveIntegerField(default=0)
     duplicate_count = models.PositiveIntegerField(default=0)
     total_bytes = models.BigIntegerField(default=0)
     folder_modified_at = models.DateTimeField(null=True)
     discovered_at = models.DateTimeField(auto_now_add=True, db_index=True)
-    discovered_by = models.CharField(max_length=100, blank=True)   # which reader copy registered it
+    discovered_by = models.CharField(max_length=100, blank=True)   # which reader registered it
+    finished_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        # The order the pipeline should take folders in: priority first, then oldest first.
-        indexes = [models.Index(fields=["status", "priority", "discovered_at"], name="intake_next_idx")]
+        # "the next folders in this line": filter by stage, then priority, then oldest
+        indexes = [models.Index(fields=["stage", "priority", "id"], name="folder_line_idx")]
 
     def __str__(self):
-        return f"{self.name} ({self.accuracy}, {self.status})"
+        return f"{self.name} ({self.accuracy}, {self.stage})"
 
 
 class IntakeImage(models.Model):
-    """One image file inside an IntakeFolder, with what the reader learned about it."""
+    """One image inside an IntakeFolder, travelling through the image lines:
+
+      new  ->  preprocessing  ->  cleaned  ->  ocr_running  ->  read
+      (skipped: a duplicate of another image in the folder; failed: given up)
+    """
+
+    class Stage(models.TextChoices):
+        NEW = "new", "Waiting for preprocessing"
+        PREPROCESSING = "preprocessing", "Preprocessing"
+        CLEANED = "cleaned", "Waiting for OCR"
+        OCR_RUNNING = "ocr_running", "OCR working"
+        READ = "read", "Read"
+        SKIPPED = "skipped", "Skipped (duplicate)"
+        FAILED = "failed", "Failed"
+
     folder = models.ForeignKey(IntakeFolder, on_delete=models.CASCADE, related_name="images")
     file_name = models.CharField(max_length=255)
     path = models.CharField(max_length=500)
@@ -210,6 +229,50 @@ class IntakeImage(models.Model):
     sha256 = models.CharField(max_length=64, db_index=True)   # fingerprint: same content = same hash
     is_duplicate = models.BooleanField(default=False)        # same content as another image in this folder
     modified_at = models.DateTimeField()
+    # assembly line
+    stage = models.CharField(max_length=14, choices=Stage.choices, default=Stage.NEW, db_index=True)
+    priority = models.PositiveSmallIntegerField(default=0)   # copied from the folder: low accuracy first
+    taken_by = models.CharField(max_length=50, blank=True)   # bot holding it right now
+    taken_at = models.DateTimeField(null=True, blank=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    last_error = models.TextField(blank=True)
+    failed_in = models.CharField(max_length=12, blank=True)       # stage it failed in (for "Retry")
+    cleaned_path = models.CharField(max_length=500, blank=True)   # written by the preprocessing stage
+    # written by the OCR stage
+    plate = models.CharField(max_length=20, blank=True)
+    confidence = models.FloatField(null=True, blank=True)
+    api_response = models.JSONField(default=dict, blank=True)
+    read_by = models.CharField(max_length=50, blank=True)              # the OCR bot that read it
+    duration_ms = models.PositiveIntegerField(null=True, blank=True)   # rate-limit wait + OCR call + retries
+    api_attempts = models.PositiveSmallIntegerField(null=True, blank=True)  # OCR calls made (1 = first try)
 
     class Meta:
         ordering = ["file_name"]
+        indexes = [models.Index(fields=["stage", "priority", "id"], name="image_line_idx")]
+
+
+class StageMinute(models.Model):
+    """How many items each stage finished (or failed) per minute: the speed shown in the UI."""
+    stage = models.CharField(max_length=12)
+    minute = models.DateTimeField()
+    done = models.PositiveIntegerField(default=0)
+    failed = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["stage", "minute"], name="stage_minute_unique")]
+
+
+class StageSettings(models.Model):
+    """Settings of one assembly-line stage changed on the Pipeline page.
+
+    config/settings.yaml ("stages:") holds the defaults; a value saved here wins.
+    Bots read the merged settings before every batch, so a change applies within seconds,
+    without restarting anything.
+    """
+    stage = models.CharField(max_length=12, unique=True)
+    values = models.JSONField(default=dict, blank=True)     # e.g. {"batch_size": 50}
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.CharField(max_length=150, blank=True)
+
+    def __str__(self):
+        return f"{self.stage} settings"

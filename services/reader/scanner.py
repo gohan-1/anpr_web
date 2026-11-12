@@ -132,15 +132,23 @@ def register(info: FolderInfo, source: Source, instance: str) -> bool:
     """Saves the folder and its images together. Returns False if it was already registered."""
     try:
         with transaction.atomic():               # all or nothing: never a folder without its images
+            usable = [i for i in info.images if not i.is_duplicate]
             folder = IntakeFolder.objects.create(
                 path=info.path, name=info.name, source=source.name, accuracy=source.accuracy,
                 priority=source.priority, image_count=len(info.images),
-                duplicate_count=sum(i.is_duplicate for i in info.images),
+                duplicate_count=len(info.images) - len(usable),
                 total_bytes=sum(i.size_bytes for i in info.images),
-                folder_modified_at=info.modified_at, discovered_by=instance)
+                folder_modified_at=info.modified_at, discovered_by=instance,
+                # a folder with no usable image can't be read: straight to a person
+                stage=IntakeFolder.Stage.READING if usable else IntakeFolder.Stage.MANUAL,
+                route_reason="" if usable else "No usable images in the folder")
+            # Every image enters the first line ("new") with its folder's priority;
+            # duplicates skip the line entirely.
             IntakeImage.objects.bulk_create([
                 IntakeImage(folder=folder, file_name=i.file_name, path=i.path, size_bytes=i.size_bytes,
-                            sha256=i.sha256, is_duplicate=i.is_duplicate, modified_at=i.modified_at)
+                            sha256=i.sha256, is_duplicate=i.is_duplicate, modified_at=i.modified_at,
+                            priority=source.priority,
+                            stage=IntakeImage.Stage.SKIPPED if i.is_duplicate else IntakeImage.Stage.NEW)
                 for i in info.images])
         return True
     except IntegrityError:                       # another reader copy registered it a moment earlier

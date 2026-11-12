@@ -103,293 +103,216 @@ class ApiTests(APITestCase):
         self.assertEqual(self.client.get("/api/auth/me/").status_code, 401)
 
 
-# ---------------------------------------------------------------- bots and queue
-import tempfile  # noqa: E402
-import threading  # noqa: E402
+# ---------------------------------------------------------------- bots
 from pathlib import Path  # noqa: E402
 
-from django.db import connection  # noqa: E402
-
-from . import queue  # noqa: E402
-from .models import Bot, WorkItem  # noqa: E402
+from .models import Bot  # noqa: E402
 
 
-def make_bot(name="bot-1", **kw):
-    bot = Bot(name=name, api_username="acct", **kw)
+def make_bot(name="ocr-1", stage="ocr", **kw):
+    bot = Bot(name=name, stage=stage, api_username="acct", **kw)
     bot.set_password("s3cret")
     bot.save()
     return bot
 
 
-class QueueTests(TestCase):
-    def test_enqueue_is_idempotent(self):
-        with tempfile.TemporaryDirectory() as d:
-            for n in range(5):
-                (Path(d) / f"car_{n}").mkdir()
-            (Path(d) / "not_a_folder.txt").write_text("x")
-            self.assertEqual(queue.enqueue_folders(Path(d)), 5)
-            self.assertEqual(queue.enqueue_folders(Path(d)), 0)    # nothing queued twice
+class BotApiTests(APITestCase):
+    """The Bots page: every bot belongs to a stage; OCR bots carry their own API account."""
 
-    def test_two_bots_never_get_the_same_folder(self):
-        WorkItem.objects.bulk_create([WorkItem(path=f"/d/{n}") for n in range(10)])
-        a, b = make_bot("a"), make_bot("b")
-        got_a = {i.path for i in queue.claim(a, 6)}
-        got_b = {i.path for i in queue.claim(b, 6)}
-        self.assertEqual((len(got_a), len(got_b)), (6, 4))
-        self.assertFalse(got_a & got_b)
-
-    def test_fail_retries_then_gives_up(self):
-        WorkItem.objects.create(path="/d/x")
-        bot = make_bot()
-        for attempt in (1, 2, 3):
-            item = queue.claim(bot, 1)[0]
-            status = queue.fail(item, "boom", max_attempts=3)
-        self.assertEqual(status, WorkItem.Status.FAILED)
-        self.assertEqual(queue.retry_failed(), 1)
-
-    def test_stale_items_return_to_queue(self):
-        WorkItem.objects.create(path="/d/x")
-        bot = make_bot()
-        queue.claim(bot, 1)
-        Bot.objects.filter(pk=bot.pk).update(state=Bot.State.CRASHED)   # its bot died
-        self.assertEqual(queue.requeue_stale(600, 3), 1)
-        self.assertEqual(WorkItem.objects.get().status, WorkItem.Status.PENDING)
-
-    def test_bot_with_input_folder_only_gets_its_own_folders(self):
-        with tempfile.TemporaryDirectory() as d:
-            gate1 = Path(d) / "gate1"
-            gate1.mkdir()
-            for n in range(3):
-                (gate1 / f"car_g{n}").mkdir()
-                (Path(d) / f"car_s{n}").mkdir()
-            owner = make_bot("owner", input_dir=str(gate1))
-            shared = make_bot("shared")
-            added = queue.scan_all(Path(d), 0)
-            self.assertEqual(sorted(added.values()), [3, 3])      # gate1 itself is NOT a vehicle folder
-            got_owner = {Path(i.path).name for i in queue.claim(owner, 10)}
-            got_shared = {Path(i.path).name for i in queue.claim(shared, 10)}
-            self.assertEqual(got_owner, {"car_g0", "car_g1", "car_g2"})
-            self.assertEqual(got_shared, {"car_s0", "car_s1", "car_s2"})
-
-    def test_bot_with_input_folder_helps_with_shared_folders_after_its_own(self):
-        with tempfile.TemporaryDirectory() as d:
-            gate1 = Path(d) / "gate1"
-            gate1.mkdir()
-            for n in range(2):
-                (gate1 / f"car_g{n}").mkdir()
-            for n in range(3):
-                (Path(d) / f"car_s{n}").mkdir()
-            owner = make_bot("owner", input_dir=str(gate1))
-            queue.scan_all(Path(d), 0)
-            first = [Path(i.path).name for i in queue.claim(owner, 3, help_shared=True)]
-            self.assertEqual(sorted(first[:2]), ["car_g0", "car_g1"])          # its own folders first
-            self.assertTrue(first[2].startswith("car_s"))                       # spare room: a shared one
-            rest = {Path(i.path).name for i in queue.claim(owner, 10, help_shared=True)}
-            self.assertEqual(len(rest), 2)                                      # the other 2 shared ones
-            self.assertFalse(set(first) & rest)                                 # never the same folder twice
-            self.assertEqual(queue.claim(owner, 10, help_shared=True), [])      # nothing left
-
-    def test_other_bots_own_folders_are_never_taken_as_help(self):
-        with tempfile.TemporaryDirectory() as d:
-            gate1, gate2 = Path(d) / "gate1", Path(d) / "gate2"
-            for g in (gate1, gate2):
-                g.mkdir()
-                (g / "car").mkdir()
-            b1 = make_bot("b1", input_dir=str(gate1))
-            make_bot("b2", input_dir=str(gate2))
-            queue.scan_all(Path(d), 0)
-            self.assertEqual([i.path for i in queue.claim(b1, 10, help_shared=True)], [str(gate1 / "car")])
-
-    def test_bot_given_a_single_vehicle_folder_processes_it(self):
-        with tempfile.TemporaryDirectory() as d:
-            car = Path(d).resolve() / "vehicle_002"
-            car.mkdir()
-            (car / "a.jpg").write_bytes(b"x")
-            bot = make_bot("solo", input_dir=str(car))
-            queue.scan_all(None, 0)
-            queue.scan_all(None, 0)                                   # not queued twice
-            self.assertEqual([i.path for i in queue.claim(bot, 10)], [str(car)])
-
-    def test_choosing_an_already_queued_folder_moves_it_to_the_bot(self):
-        with tempfile.TemporaryDirectory() as d:
-            root = Path(d).resolve()
-            for n in range(3):
-                (root / f"ocr_{n}").mkdir()
-                (root / f"ocr_{n}" / "a.jpg").write_bytes(b"x")
-            bot = make_bot("b1")
-            queue.scan_all(root, 0)                                   # all 3 queued as shared
-            self.assertTrue(all(w.assigned_bot is None for w in WorkItem.objects.all()))
-            Bot.objects.filter(pk=bot.pk).update(input_dir=str(root / "ocr_1"))
-            bot.refresh_from_db()
-            queue.scan_all(root, 0)
-            self.assertEqual([i.path for i in queue.claim(bot, 10)], [str(root / "ocr_1")])
-            # switching to another folder: the old one (if still waiting) goes back to the shared pool
-            WorkItem.objects.filter(path=str(root / "ocr_1")).update(status=WorkItem.Status.PENDING, bot=None)
-            Bot.objects.filter(pk=bot.pk).update(input_dir=str(root / "ocr_2"))
-            queue.scan_all(root, 0)
-            self.assertIsNone(WorkItem.objects.get(path=str(root / "ocr_1")).assigned_bot)
-            self.assertEqual(WorkItem.objects.get(path=str(root / "ocr_2")).assigned_bot, bot)
-
-    def test_save_folder_result_stores_ocr_without_deciding(self):
-        from pipeline.processor import ImageAnalysis
-        from .ingest import save_folder_result
-        imgs = [ImageAnalysis(Path("/x/a.jpg"), plate="MH12AB1234", confidence=0.62, raw={"r": 1}),
-                ImageAnalysis(Path("/x/b.jpg"), plate="MH12AB1284", confidence=0.91),
-                ImageAnalysis(Path("/x/c.jpg"), error="HTTPStatusError: 400")]
-        f = save_folder_result(Path("/x"), imgs, processed_by="bot-1")
-        self.assertEqual((f.route, f.final_plate, f.final_score, f.scenario), ("processed", "MH12AB1284", 0.91, ""))
-        self.assertEqual(f.images.count(), 3)
-        failed = save_folder_result(Path("/y"), [ImageAnalysis(Path("/y/a.jpg"), error="timeout")])
-        self.assertEqual(failed.route, "failed")
+    def setUp(self):
+        get_user_model().objects.create_user("sam", password="pass12345")
+        token = self.client.post("/api/auth/login/", {"username": "sam", "password": "pass12345"}, format="json").data["token"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
 
     def test_password_is_encrypted(self):
         bot = make_bot()
         self.assertNotIn("s3cret", bot.api_password_encrypted)
         self.assertEqual(Bot.objects.get().get_password(), "s3cret")
 
-
-class BotApiTests(APITestCase):
-    def setUp(self):
-        get_user_model().objects.create_user("sam", password="pass12345")
-        token = self.client.post("/api/auth/login/", {"username": "sam", "password": "pass12345"}, format="json").data["token"]
-        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
-
-    def test_create_never_returns_password(self):
-        r = self.client.post("/api/bots/", {"name": "bot-1", "api_username": "acct", "password": "pw",
-                                            "concurrency": 8}, format="json")
+    def test_create_ocr_bot_with_account_never_returns_password(self):
+        r = self.client.post("/api/bots/", {"name": "ocr-gate1", "stage": "ocr", "api_username": "acct",
+                                            "password": "pw", "rate_limit": 2}, format="json")
         self.assertEqual(r.status_code, 201)
         self.assertNotIn("password", r.data)
         self.assertNotIn("api_password_encrypted", r.data)
+        self.assertTrue(r.data["has_account"])
+        self.assertFalse(r.data["desired_running"])          # created switched off
 
     def test_create_validates(self):
-        r = self.client.post("/api/bots/", {"name": "bad name!", "api_username": "a", "concurrency": 999}, format="json")
+        r = self.client.post("/api/bots/", {"name": "bad name!", "stage": "nope", "api_username": "a",
+                                            "rate_limit": -1}, format="json")
         self.assertEqual(r.status_code, 400)
-        self.assertIn("name", r.data)          # "bad name!" has a space and a "!"
-        self.assertIn("concurrency", r.data)   # 999 is above the limit
-        self.assertIn("password", r.data)      # a new bot needs a password
+        self.assertEqual(set(r.data), {"name", "stage", "rate_limit"})
+        half = self.client.post("/api/bots/", {"name": "ocr-x", "stage": "ocr", "api_username": "a"}, format="json")
+        self.assertIn("password", half.data)                   # a username needs its password
+        dup = self.client.post("/api/bots/", {"name": "ocr-x", "stage": "trip"}, format="json")
+        self.assertEqual(dup.status_code, 201)
+        self.assertIn("name", self.client.post("/api/bots/", {"name": "ocr-x", "stage": "llm"}, format="json").data)
+
+    def test_any_stage_without_account(self):
+        for stage in ("reader", "preprocess", "ocr", "llm", "trip"):
+            r = self.client.post("/api/bots/", {"name": f"{stage}-a", "stage": stage}, format="json")
+            self.assertEqual(r.status_code, 201, r.data)
+        self.assertFalse(Bot.objects.get(name="ocr-a").api_password_encrypted)
+
+    def test_edit_account_and_rate_limit_but_never_the_stage(self):
+        bot = make_bot()
+        r = self.client.patch(f"/api/bots/{bot.id}/", {"rate_limit": 5, "password": "new-pw"}, format="json")
+        self.assertEqual(r.data["rate_limit"], 5)
+        self.assertEqual(Bot.objects.get().get_password(), "new-pw")
+        self.client.patch(f"/api/bots/{bot.id}/", {"rate_limit": 1}, format="json")     # no password: kept
+        self.assertEqual(Bot.objects.get().get_password(), "new-pw")
+        self.assertIn("stage", self.client.patch(f"/api/bots/{bot.id}/", {"stage": "llm"}, format="json").data)
+        r = self.client.patch(f"/api/bots/{bot.id}/", {"api_username": ""}, format="json")   # remove the account
+        self.assertFalse(r.data["has_account"])
+
+    def test_list_filters_by_stage(self):
+        make_bot("ocr-1")
+        make_bot("trip-1", stage="trip")
+        names = [b["name"] for b in self.client.get("/api/bots/?stage=trip").data["results"]]
+        self.assertEqual(names, ["trip-1"])
 
     def test_start_stop_delete(self):
         bot = make_bot()
         self.assertTrue(self.client.post(f"/api/bots/{bot.id}/start/").data["desired_running"])
+        self.assertFalse(self.client.post(f"/api/bots/{bot.id}/stop/").data["desired_running"])
+        self.client.post(f"/api/bots/{bot.id}/start/")
         Bot.objects.filter(pk=bot.pk).update(state=Bot.State.RUNNING)
         r = self.client.delete(f"/api/bots/{bot.id}/")
         self.assertEqual(r.status_code, 202)                 # running: asked to finish, then removed
         self.assertTrue(Bot.objects.get().delete_requested)
-        Bot.objects.filter(pk=bot.pk).update(state=Bot.State.STOPPED)
+        self.assertEqual(self.client.post(f"/api/bots/{bot.id}/start/").status_code, 409)
         stopped = make_bot("idle")
         self.assertEqual(self.client.delete(f"/api/bots/{stopped.id}/").status_code, 204)   # removed now
-
-    def test_queue_add_and_status(self):
-        with tempfile.TemporaryDirectory() as d:
-            (Path(d) / "car_1").mkdir()
-            r = self.client.post("/api/queue/add/", {"path": d}, format="json")
-            self.assertEqual(r.data["added"], 1)
-        self.assertEqual(self.client.get("/api/queue/").data["counts"]["pending"], 1)
-        r = self.client.post("/api/queue/add/", {"path": "/no/such/folder"}, format="json")
-        self.assertEqual(r.status_code, 400)
-
-
-class SpeedTests(TestCase):
-    def test_speed_uses_time_actually_covered(self):
-        from datetime import timedelta
-        from django.utils import timezone
-        now = timezone.now()
-        # 60 folders finished over the last minute -> about 60/min, not 12/min
-        WorkItem.objects.bulk_create([
-            WorkItem(path=f"/d/{n}", status=WorkItem.Status.DONE, finished_at=now - timedelta(seconds=n))
-            for n in range(60)])
-        self.assertAlmostEqual(queue.folders_per_minute(WorkItem.objects.all()), 60, delta=2)
-
-
-class BrowseTests(TestCase):
-    def setUp(self):
-        from django.contrib.auth.models import User
-        from rest_framework.test import APIClient
-        self.client = APIClient()
-        self.client.force_authenticate(User.objects.create_user("u", password="p"))
-        self.tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self.tmp.name).resolve()
-        (self.root / "gate1" / "car_1").mkdir(parents=True)
-        (self.root / ".hidden").mkdir()
-        from unittest import mock
-        cfg = {"paths": {"browse_roots": [str(self.root)], "input_dir": str(self.root)}}
-        self.patch = mock.patch("core.api.load_config", return_value=cfg)
-        self.patch.start()
-
-    def tearDown(self):
-        self.patch.stop()
-        self.tmp.cleanup()
-
-    def test_roots_then_subfolders(self):
-        r = self.client.get("/api/browse/").json()
-        self.assertEqual(r["dirs"], [{"name": str(self.root), "path": str(self.root)}])
-        r = self.client.get("/api/browse/", {"path": str(self.root)}).json()
-        self.assertEqual([d["name"] for d in r["dirs"]], ["gate1"])        # hidden folders skipped
-        self.assertIsNone(r["parent"])                                     # can't go above the root
-        r = self.client.get("/api/browse/", {"path": str(self.root / "gate1")}).json()
-        self.assertEqual(r["parent"], str(self.root))
-
-    def test_outside_roots_is_forbidden(self):
-        for bad in ["/etc", str(self.root / ".." )]:
-            self.assertEqual(self.client.get("/api/browse/", {"path": bad}).status_code, 403)
-
-    def test_needs_login(self):
-        from rest_framework.test import APIClient
-        self.assertEqual(APIClient().get("/api/browse/").status_code, 401)
 
 
 # ============================================================================ reset_results
 from django.contrib.auth import get_user_model as _get_user_model  # noqa: E402
 from django.core.management import CommandError, call_command  # noqa: E402
+from django.utils import timezone  # noqa: E402
 
-from .models import BotEvent  # noqa: E402
+from .models import BotEvent, IntakeFolder, IntakeImage, StageSettings  # noqa: E402
+from .ocr_results import save_result  # noqa: E402
+
+
+def registered(name, stage="done", image_stage="read"):
+    f = IntakeFolder.objects.create(path=f"/d/{name}", name=name, source="t", accuracy="high", priority=1,
+                                    image_count=1, stage=stage)
+    IntakeImage.objects.create(folder=f, file_name="a.jpg", path=f"/d/{name}/a.jpg", size_bytes=1, sha256=name,
+                               modified_at=timezone.now(), stage=image_stage, plate="AB12", confidence=0.9,
+                               read_by="ocr-1")
+    save_result(f, list(f.images.all()), "test")
+    return f
 
 
 class ResetResultsTests(TestCase):
     def setUp(self):
-        from pipeline.processor import ImageAnalysis
-        from .ingest import save_folder_result
         self.user = _get_user_model().objects.create_user("keep-me", password="x")
-        self.bot = make_bot("bot-1")
+        self.bot = make_bot("ocr-1")
         Bot.objects.filter(pk=self.bot.pk).update(processed=2, failed=1)
         BotEvent.objects.create(bot=self.bot, message="hello")
-        for name in ("ocr_1", "ocr_2"):
-            f = save_folder_result(Path(f"/d/{name}"), [ImageAnalysis(Path(f"/d/{name}/a.jpg"), plate="AB12", confidence=0.9)],
-                                   processed_by="bot-1")
-            WorkItem.objects.create(path=f"/d/{name}", status=WorkItem.Status.DONE, folder=f, bot_name="bot-1")
-        WorkItem.objects.create(path="/d/ocr_3", status=WorkItem.Status.IN_PROGRESS)
+        StageSettings.objects.create(stage="ocr", values={"batch_size": 7})
+        registered("ocr_1")
+        registered("ocr_2")
+        registered("ocr_3", stage="reading", image_stage="ocr_running")     # a bot is reading it now
 
-    def test_reset_all_deletes_results_and_keeps_bots_and_users(self):
+    def test_reset_all_deletes_results_and_keeps_bots_settings_and_users(self):
         call_command("reset_results", "--yes", stdout=open("/dev/null", "w"))
-        self.assertEqual((WorkItem.objects.count(), Folder.objects.count(), Image.objects.count(),
-                          BotEvent.objects.count()), (0, 0, 0, 0))
+        self.assertEqual((IntakeFolder.objects.count(), IntakeImage.objects.count(), Folder.objects.count(),
+                          Image.objects.count(), BotEvent.objects.count()), (0, 0, 0, 0, 0))
         bot = Bot.objects.get()
-        self.assertEqual((bot.name, bot.processed, bot.failed), ("bot-1", 0, 0))
-        self.assertTrue(bot.api_password_encrypted)                   # API login kept
+        self.assertEqual((bot.name, bot.processed, bot.failed), ("ocr-1", 0, 0))
+        self.assertTrue(bot.api_password_encrypted)                   # API account kept
+        self.assertEqual(StageSettings.objects.get().values, {"batch_size": 7})
         self.assertTrue(_get_user_model().objects.filter(username="keep-me").exists())
 
     def test_reprocess_one_folder_deletes_only_that_folder(self):
         call_command("reset_results", "--folder", "ocr_1", "--yes", stdout=open("/dev/null", "w"))
-        self.assertEqual(sorted(WorkItem.objects.values_list("path", flat=True)), ["/d/ocr_2", "/d/ocr_3"])
-        self.assertEqual(list(Folder.objects.values_list("path", flat=True)), ["/d/ocr_2"])
-        self.assertEqual(Image.objects.count(), 1)
+        self.assertEqual(sorted(IntakeFolder.objects.values_list("name", flat=True)), ["ocr_2", "ocr_3"])
+        self.assertEqual(sorted(Folder.objects.values_list("name", flat=True)), ["ocr_2", "ocr_3"])
+        self.assertEqual(Image.objects.count(), 2)
 
     def test_folder_a_bot_is_working_on_is_not_touched(self):
-        with self.assertRaises(CommandError):                          # only match is in progress -> nothing to do
+        with self.assertRaises(CommandError):                          # only match is being read -> nothing to do
             call_command("reset_results", "--folder", "ocr_3", "--yes", stdout=open("/dev/null", "w"))
-        self.assertTrue(WorkItem.objects.filter(path="/d/ocr_3").exists())
+        self.assertTrue(IntakeFolder.objects.filter(name="ocr_3").exists())
 
-    def test_reprocessed_folder_is_queued_again_by_the_next_scan(self):
+    def test_reprocessed_folder_is_registered_again_by_the_next_scan(self):
+        import tempfile
+        from services.reader.scanner import Shard, Source, scan_source
         with tempfile.TemporaryDirectory() as d:
             car = Path(d).resolve() / "ocr_9"
             car.mkdir()
-            queue.scan_all(Path(d), 0)
-            WorkItem.objects.filter(path=str(car)).update(status=WorkItem.Status.DONE)
-            self.assertEqual(queue.scan_all(Path(d), 0).get(str(Path(d).resolve()), 0), 0)   # done: not again
+            (car / "a.jpg").write_bytes(b"x")
+            src = Source(name="t", path=Path(d).resolve(), accuracy="high", priority=1)
+            scan = lambda: scan_source(src, Shard.parse("1/1"), "test", extensions={".jpg"},   # noqa: E731
+                                       min_age_seconds=0, workers=1).registered
+            self.assertEqual(scan(), 1)
+            self.assertEqual(scan(), 0)                                   # known: not again
             call_command("reset_results", "--folder", str(car), "--yes", stdout=open("/dev/null", "w"))
-            queue.scan_all(Path(d), 0)
-            self.assertEqual(WorkItem.objects.get(path=str(car)).status, WorkItem.Status.PENDING)
+            self.assertEqual(scan(), 1)                                   # registered again, images back at the start
+            self.assertEqual(IntakeImage.objects.get(folder__path=str(car)).stage, "new")
 
     def test_unknown_folder_is_an_error(self):
         with self.assertRaises(CommandError):
             call_command("reset_results", "--folder", "nope", "--yes", stdout=open("/dev/null", "w"))
+
+
+# ---------------------------------------------------------------- environments and safety
+from unittest.mock import patch  # noqa: E402
+
+from django.core.management import call_command  # noqa: E402
+from django.core.management.base import CommandError  # noqa: E402
+from django.test import override_settings  # noqa: E402
+
+
+class EnvironmentTests(APITestCase):
+    def setUp(self):
+        get_user_model().objects.create_user("sam", password="pass12345")
+
+    def login(self):
+        r = self.client.post("/api/auth/login/", {"username": "sam", "password": "pass12345"}, format="json")
+        self.assertEqual(r.status_code, 200)      # signing in works even when read-only
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {r.data['token']}")
+
+    def test_env_endpoint_is_public_and_hides_password(self):
+        r = self.client.get("/api/env/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(set(r.data), {"env", "read_only", "database"})
+
+    @override_settings(READ_ONLY=True, ANPR_ENV="production")
+    def test_read_only_blocks_every_change(self):
+        self.login()
+        self.assertEqual(self.client.get("/api/stats/").status_code, 200)        # reading is fine
+        r = self.client.post("/api/bots/", {"name": "x", "api_username": "a", "password": "p"}, format="json")
+        self.assertEqual(r.status_code, 403)
+        self.assertIn("read-only", r.json()["detail"])
+        self.assertEqual(self.client.post("/admin/core/bot/add/").status_code, 403)   # admin too
+
+    @override_settings(READ_ONLY=True, ANPR_ENV="production")
+    def test_read_only_blocks_commands(self):
+        with self.assertRaisesMessage(CommandError, "read-only"):
+            call_command("reset_results", "--yes")
+        with self.assertRaisesMessage(CommandError, "read-only"):
+            call_command("bot_supervisor", "--yes")
+
+    @override_settings(IS_LOCAL=False, ANPR_ENV="staging")
+    def test_staging_needs_typed_confirmation(self):
+        registered("car_1")
+        quiet = open("/dev/null", "w")
+        with patch("builtins.input", side_effect=["yes"]):               # "yes" is not enough
+            with self.assertRaisesMessage(CommandError, "Cancelled"):
+                call_command("reset_results", stdout=quiet)
+        self.assertEqual(IntakeFolder.objects.count(), 1)
+        with patch("builtins.input", side_effect=["staging", "yes"]):    # the name is, then the usual "yes"
+            call_command("reset_results", stdout=quiet)
+        self.assertEqual(IntakeFolder.objects.count(), 0)
+
+    @override_settings(IS_LOCAL=False, ANPR_ENV="production")
+    def test_scripts_need_yes_and_local_only_commands_refuse(self):
+        with self.assertRaisesMessage(CommandError, "--yes"):
+            call_command("migrate", interactive=False, verbosity=0)
+        with self.assertRaisesMessage(CommandError, "only runs on local"):
+            call_command("seed_demo")
+        with self.assertRaisesMessage(CommandError, "only works on local"):
+            call_command("flush", interactive=False)

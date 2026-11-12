@@ -1,4 +1,12 @@
+"""
+Start one copy of the reader service.
 
+  python -m services.reader                              # 1 copy, port 8101
+  python -m services.reader --port 8102 --shard 2/2      # second of two copies
+  python -m services.reader --env staging                # use the staging database
+
+Each copy needs its own port (on one machine) and its own shard number.
+"""
 import argparse
 import os
 import socket

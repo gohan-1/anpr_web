@@ -1,17 +1,18 @@
 """
-Timing report: how long a folder and a single image take, per bot, with the slowest ones.
+Timing report for the assembly line: how long a folder and a single image take, per OCR
+bot, with the slowest ones.
 
     python manage.py report                         # last 24 hours, on screen   (make report)
-    python manage.py report --since 7d --bot bot-1  # a period and one bot      (make report SINCE=7d BOT=bot-1)
+    python manage.py report --since 7d --bot ocr-1  # a period and one OCR bot  (make report SINCE=7d BOT=ocr-1)
     python manage.py report --since all --out /tmp/r  # also writes r.html, r_folders.csv, r_images.csv
                                                     #                           (make report-files)
 
 What is measured:
-  * folder time  = the bot started the folder -> its results were saved   (WorkItem.claimed_at -> finished_at)
-  * queue wait   = the folder was found -> a bot started it               (WorkItem.created_at -> claimed_at)
-  * image time   = rate-limit wait + reading the file + OCR call + retries (Image.duration_ms)
-                   Images processed before timing was added have no image time.
-  * throughput   = folders finished per hour between the first start and the last finish in the period
+  * folder time  = the folder was found -> its last image was through OCR   (IntakeFolder.discovered_at -> read_at)
+                   This includes time waiting in lines, so it grows when a stage has too few bots.
+  * to done      = the folder was found -> its trip was created              (discovered_at -> finished_at)
+  * image time   = rate-limit wait + reading the file + OCR call + retries   (IntakeImage.duration_ms)
+  * throughput   = folders read per hour while at least one folder was in the line
 """
 import csv
 import html
@@ -20,10 +21,12 @@ from datetime import timedelta
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db.models import Avg, Count, Max, Sum
+from django.db.models import Avg, Count, Max, Q, Sum
 from django.utils import timezone
 
-from core.models import Image, WorkItem
+from core import stage_queue
+from core.models import IntakeFolder, IntakeImage
+from pipeline.stages import BOT_STAGES, STAGE_LABELS
 
 
 # ---------------------------------------------------------------- helpers
@@ -93,91 +96,89 @@ class Command(BaseCommand):
     def handle(self, *args, **o):
         since = parse_since(o["since"])
         period = "all time" if since is None else f"last {o['since']}"
-        scope = f"bot {o['bot']}" if o["bot"] else "all bots"
+        scope = f"OCR bot {o['bot']}" if o["bot"] else "all bots"
 
-        # Folders finished in the period (done or failed after all attempts)
-        items = WorkItem.objects.filter(finished_at__isnull=False, claimed_at__isnull=False)
+        # Folders whose images were all through OCR in the period
+        fq = IntakeFolder.objects.filter(read_at__isnull=False)
         if since:
-            items = items.filter(finished_at__gte=since)
+            fq = fq.filter(read_at__gte=since)
         if o["bot"]:
-            items = items.filter(bot_name=o["bot"])
-        items = items.select_related("folder").annotate(n_images=Count("folder__images"),
-                                                        avg_ms=Avg("folder__images__duration_ms"),
-                                                        max_ms=Max("folder__images__duration_ms"),
-                                                        sum_ms=Sum("folder__images__duration_ms"))
+            fq = fq.filter(images__read_by=o["bot"]).distinct()
+        fq = fq.annotate(n_images=Count("images", filter=Q(images__is_duplicate=False)),
+                         avg_ms=Avg("images__duration_ms"), max_ms=Max("images__duration_ms"),
+                         sum_ms=Sum("images__duration_ms"))
         folders = []
-        for w in items.iterator(chunk_size=2000):
+        for f in fq.iterator(chunk_size=2000):
             folders.append({
-                "name": Path(w.path).name, "path": w.path, "bot": w.bot_name or "-", "status": w.status,
-                "images": w.n_images, "seconds": (w.finished_at - w.claimed_at).total_seconds(),
-                "wait": (w.claimed_at - w.created_at).total_seconds(),
-                "avg_image": w.avg_ms / 1000 if w.avg_ms is not None else None,
-                "max_image": w.max_ms / 1000 if w.max_ms is not None else None,
-                "sum_images": w.sum_ms / 1000 if w.sum_ms is not None else None,
-                "plate": w.folder.final_plate if w.folder else "", "attempts": w.attempts,
-                "started": timezone.localtime(w.claimed_at), "finished": timezone.localtime(w.finished_at),
+                "name": f.name, "path": f.path, "stage": f.stage, "route": f.route_reason,
+                "images": f.n_images, "seconds": (f.read_at - f.discovered_at).total_seconds(),
+                "to_done": (f.finished_at - f.discovered_at).total_seconds() if f.stage == "done" and f.finished_at else None,
+                "avg_image": f.avg_ms / 1000 if f.avg_ms is not None else None,
+                "max_image": f.max_ms / 1000 if f.max_ms is not None else None,
+                "sum_images": f.sum_ms / 1000 if f.sum_ms is not None else None,
+                "plate": f.plate, "confidence": f.confidence,
+                "found": timezone.localtime(f.discovered_at), "read": timezone.localtime(f.read_at),
             })
 
-        # Images processed in the period
-        imgs = Image.objects.filter(folder__workitem__isnull=False)
-        if since:
-            imgs = imgs.filter(processed_at__gte=since)
+        # Images read by OCR in those folders
+        iq = IntakeImage.objects.filter(folder__in=fq.values("id"), stage__in=("read", "failed"))
         if o["bot"]:
-            imgs = imgs.filter(folder__processed_by=o["bot"])
-        images = [{"file": f, "folder": Path(p).parent.name, "path": p, "bot": b or "-",
+            iq = iq.filter(read_by=o["bot"])
+        images = [{"file": fn, "folder": folder, "path": p, "bot": b or "-", "stage": st,
                    "seconds": ms / 1000 if ms is not None else None, "attempts": att or 0,
-                   "error": err, "plate": pl}
-                  for f, p, b, ms, att, err, pl in imgs.values_list(
-                      "file_name", "path", "folder__processed_by", "duration_ms", "api_attempts", "api_error", "plate"
-                  ).iterator(chunk_size=5000)]
+                   "error": err if st == "failed" else "", "plate": pl}
+                  for fn, folder, p, b, st, ms, att, err, pl in iq.values_list(
+                      "file_name", "folder__name", "path", "read_by", "stage", "duration_ms", "api_attempts",
+                      "last_error", "plate").iterator(chunk_size=5000)]
         timed = [i for i in images if i["seconds"] is not None]
 
         # Summary numbers
-        done = [f for f in folders if f["status"] == WorkItem.Status.DONE]
-        failed = [f for f in folders if f["status"] == WorkItem.Status.FAILED]
-        span = busy_seconds([(f["started"], f["finished"]) for f in folders])
+        routes = {"needs_trip": 0, "needs_llm": 0, "manual": 0}
+        for f in folders:
+            key = ("needs_trip" if f["stage"] in ("needs_trip", "trip_running", "done") else
+                   "needs_llm" if f["stage"] in ("needs_llm", "llm_running") else "manual")
+            routes[key] += 1
+        done = [f for f in folders if f["stage"] == "done"]
+        span = busy_seconds([(f["found"], f["read"]) for f in folders])
         per_hour = len(folders) / (span / 3600) if span > 0 else None
-        pending = WorkItem.objects.filter(status=WorkItem.Status.PENDING).count()
-        in_progress = WorkItem.objects.filter(status=WorkItem.Status.IN_PROGRESS).count()
+        line = stage_queue.line_stats()["stages"]
 
         summary = [
-            ["Folders finished", f"{len(folders)}  ({len(done)} done, {len(failed)} failed)"],
-            ["Images sent to OCR", f"{len(images)}  ({len(timed)} with timing)"],
-            ["Images with API error", f"{sum(1 for i in images if i['error'])}"],
-            ["Images that needed a retry", f"{sum(1 for i in timed if i['attempts'] > 1)}"],
-            ["Busy time (at least one folder running)", fmt(span) if folders else "-"],
+            ["Folders read by OCR", f"{len(folders)}  ({routes['needs_trip']} to trip, {routes['needs_llm']} to LLM, "
+                                    f"{routes['manual']} to manual review; {len(done)} trips done)"],
+            ["Images read", f"{sum(1 for i in images if i['stage'] == 'read')}  ({len(timed)} with timing)"],
+            ["Images failed for good", f"{sum(1 for i in images if i['stage'] == 'failed')}"],
+            ["Images that needed an OCR retry", f"{sum(1 for i in timed if i['attempts'] > 1)}"],
+            ["Busy time (at least one folder in the line)", fmt(span) if folders else "-"],
             ["Throughput while busy", f"{per_hour:,.0f} folders/hour" if per_hour else "-"],
-            ["Images per folder (avg)", f"{len(images) / len(folders):.1f}" if folders else "-"],
-            ["Queue now", f"{pending} waiting, {in_progress} in progress"],
+            ["Images per folder (avg)", f"{sum(f['images'] for f in folders) / len(folders):.1f}" if folders else "-"],
+            ["Lines now (waiting)", ", ".join(f"{STAGE_LABELS[n]} {line[n]['waiting']}" for n in BOT_STAGES if n != "reader")],
         ]
         timing = [
-            stat_row("Folder (bot start -> saved)", stats([f["seconds"] for f in folders])),
-            stat_row("Queue wait (found -> started)", stats([f["wait"] for f in folders])),
-            stat_row("One image (read + OCR + retries)", stats([i["seconds"] for i in timed])),
+            stat_row("Folder (found -> all images read)", stats([f["seconds"] for f in folders])),
+            stat_row("Folder (found -> trip done)", stats([f["to_done"] for f in folders if f["to_done"] is not None])),
+            stat_row("One image (OCR call + retries)", stats([i["seconds"] for i in timed])),
             stat_row("All images of a folder, added up",
                      stats([f["sum_images"] for f in folders if f["sum_images"] is not None])),
         ]
         per_bot = []
-        for bot in sorted({f["bot"] for f in folders}):
-            fb = [f for f in folders if f["bot"] == bot]
-            ib = [i for i in timed if i["bot"] == bot]
-            sf, si = stats([f["seconds"] for f in fb]), stats([i["seconds"] for i in ib])
-            per_bot.append([bot, str(len(fb)), str(sum(f["images"] for f in fb)),
-                            fmt(sf.get("avg")), fmt(sf.get("p95")), fmt(si.get("avg")), fmt(si.get("p95")),
-                            str(sum(1 for f in fb if f["status"] == WorkItem.Status.FAILED))])
+        for bot in sorted({i["bot"] for i in images}):
+            ib = [i for i in images if i["bot"] == bot]
+            si = stats([i["seconds"] for i in ib if i["seconds"] is not None])
+            per_bot.append([bot, str(len(ib)), str(len({i["folder"] for i in ib})), fmt(si.get("avg")),
+                            fmt(si.get("p95")), str(sum(1 for i in ib if i["attempts"] > 1))])
         top = o["top"]
-        slow_folders = [[f["name"], f["bot"], str(f["images"]), fmt(f["seconds"]), fmt(f["max_image"])]
+        slow_folders = [[f["name"], f["stage"], str(f["images"]), fmt(f["seconds"]), fmt(f["max_image"])]
                         for f in sorted(folders, key=lambda f: f["seconds"], reverse=True)[:top]]
         slow_images = [[i["folder"] + "/" + i["file"], i["bot"], fmt(i["seconds"]), str(i["attempts"]),
-                        (i["error"][:40] or "ok")]
+                        (i["error"][:40] or i["plate"] or "no plate")]
                        for i in sorted(timed, key=lambda i: i["seconds"], reverse=True)[:top]]
 
         sections = [
             ("Summary", ["", ""], summary),
             ("Timing", ["", "count", "avg", "min", "median", "p95", "max"], timing),
-            ("Per bot", ["bot", "folders", "images", "folder avg", "folder p95", "image avg", "image p95", "failed"],
-             per_bot),
-            (f"Slowest {top} folders", ["folder", "bot", "images", "time", "slowest image"], slow_folders),
+            ("Per OCR bot", ["bot", "images", "folders", "image avg", "image p95", "retried"], per_bot),
+            (f"Slowest {top} folders", ["folder", "now in", "images", "time", "slowest image"], slow_folders),
             (f"Slowest {top} images", ["image", "bot", "time", "OCR calls", "result"], slow_images),
         ]
         title = f"ANPR timing report: {period}, {scope}"
@@ -189,10 +190,10 @@ class Command(BaseCommand):
             out.parent.mkdir(parents=True, exist_ok=True)
             self.write_html(out.with_name(out.name + ".html"), title, generated, sections)
             self.write_csv(out.with_name(out.name + "_folders.csv"), folders,
-                           ["name", "path", "bot", "status", "images", "seconds", "wait", "avg_image", "max_image", "sum_images",
-                            "attempts", "plate", "started", "finished"])
+                           ["name", "path", "stage", "route", "images", "seconds", "to_done", "avg_image", "max_image",
+                            "sum_images", "plate", "confidence", "found", "read"])
             self.write_csv(out.with_name(out.name + "_images.csv"), images,
-                           ["folder", "file", "path", "bot", "seconds", "attempts", "plate", "error"])
+                           ["folder", "file", "path", "bot", "stage", "seconds", "attempts", "plate", "error"])
             self.stdout.write(f"\nWritten:\n  {out}.html\n  {out}_folders.csv\n  {out}_images.csv")
 
     # ---------------------------------------------------------------- output
@@ -241,7 +242,7 @@ table{{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}}
 th,td{{padding:6px 10px;border-bottom:1px solid #e3e7ea;text-align:right;white-space:nowrap}}
 th:first-child,td:first-child{{text-align:left;white-space:normal}} th{{color:#5b6670;font-weight:600;font-size:13px}}
 </style>
-<h1>{e(title)}</h1><p class=muted>Generated {e(generated)}. Folder time = bot start to results saved.
-Image time = rate-limit wait + reading the file + OCR call + retries.</p>
+<h1>{e(title)}</h1><p class=muted>Generated {e(generated)}. Folder time = found by a reader to its last image
+through OCR (includes time waiting in lines). Image time = rate-limit wait + reading the file + OCR call + retries.</p>
 {''.join(parts)}
 </html>""")

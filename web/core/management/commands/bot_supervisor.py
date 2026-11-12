@@ -1,18 +1,19 @@
 """
-The supervisor:  python manage.py bot_supervisor
+The supervisor:  python manage.py bot_supervisor      (make start runs it for you)
 
-This is the ONLY command needed to process folders. It watches:
-  * each bot's own "Input folder" (set on the Bots page) -> only that bot processes them
-  * paths.input_dir from config/settings.yaml -> shared by bots that have no input folder
-    (override with --input, or turn all scanning off with --no-scan)
+Every bot is a row in the Bots table and belongs to one stage of the assembly line
+(reader, preprocess, ocr, llm, trip). For every bot that should run, the supervisor starts
+`python -m bots --stage X --name Y` and keeps it alive. Reader bots share the folders on
+disk by shard (1/3, 2/3, 3/3); when you add or remove one, the shards are renumbered and
+running readers restart with their new share.
 
 It runs forever and, every 2 seconds, makes reality match the Bots table:
   * a bot that SHOULD run but has no process      -> start it
   * a bot that should stop, or is being deleted     -> it stops itself; force it if it hangs
   * a bot being deleted that has stopped            -> delete its row
   * a bot whose process died unexpectedly           -> mark crashed, restart it (with a limit)
-  * folders stuck with a dead bot                   -> put them back in the queue
-  * every scan_every_seconds, queue any new sub-folders of the watched folders
+  * every 30 seconds: items held too long by a silent bot go back to their line, and
+    folders whose images are all finished but were never routed get routed
 
 This "compare what we want with what is, then fix the difference" loop is called
 reconciliation. Kubernetes works exactly the same way, which makes it easy to move later.
@@ -22,17 +23,18 @@ import subprocess
 import sys
 import time
 from datetime import timedelta
-from pathlib import Path
 
 from django.conf import settings
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from core import queue
-from core.models import Bot, BotEvent
+from core import stage_queue
+from core.models import Bot, BotEvent, IntakeFolder
+from core.safety import add_yes_option, confirm_environment, require_writable
 from pipeline.config import load_config
+from pipeline.stages import STAGES
 
-MANAGE_PY = str(Path(settings.BASE_DIR) / "manage.py")
+PROJECT_ROOT = str(settings.PROJECT_ROOT)        # where "python -m bots" must run
 MAX_RESTARTS = 5                 # crashes within RESTART_WINDOW before we give up
 RESTART_WINDOW = timedelta(minutes=10)
 
@@ -41,23 +43,20 @@ class Command(BaseCommand):
     help = "Start, stop, restart and clean up bots so they match the Bots table"
 
     def add_arguments(self, parser):
-        parser.add_argument("--input", help="folder to watch (default: paths.input_dir in settings.yaml)")
-        parser.add_argument("--no-scan", action="store_true", help="don't queue folders automatically")
         parser.add_argument("--interval", type=float, default=2.0)
+        add_yes_option(parser)
 
     def handle(self, *args, **opts):
+        require_writable("start the bot supervisor")
+        confirm_environment("start the bot supervisor", assume_yes=opts.get("yes", False), stdout=self.stdout)
         cfg = load_config()
         self.bcfg = cfg["bots"]
         self.procs: dict[int, subprocess.Popen] = {}     # bot id -> its process
         self.stop_asked: dict[int, float] = {}           # bot id -> when we first saw "stop"
         self.crashes: dict[int, list] = {}               # bot id -> recent crash times
-        scan = not opts["no_scan"]
-        input_dir = None
-        if scan:
-            input_dir = Path(opts["input"]).resolve() if opts["input"] else queue.resolve_dir(cfg["paths"]["input_dir"])
-            if not input_dir.is_dir():
-                raise CommandError(f"Input folder {input_dir} does not exist. Set paths.input_dir in settings.yaml.")
-        last_scan = 0.0
+        self.restarting: set[int] = set()                # reader bots being restarted with a new shard
+        self.shards: dict[int, str] = {}
+        last_stuck_check = 0.0
 
         # `kill`, `make stop` and systemd send SIGTERM, not Ctrl+C. Treat it the same way, so the
         # bots are stopped gracefully instead of being left running without a supervisor.
@@ -68,20 +67,20 @@ class Command(BaseCommand):
         # Bots that were "running" before the supervisor (re)started have no process now.
         Bot.objects.filter(state__in=[Bot.State.RUNNING, Bot.State.STARTING, Bot.State.STOPPING],
                            pid__isnull=False).update(state=Bot.State.STOPPED, pid=None)
-        self.stdout.write(f"Supervisor running. Default folder: {input_dir or 'none (--no-scan)'}; "
-                          "bots with their own input folder are watched too. "
-                          "Ctrl+C to stop all bots and exit.")
+        self.stdout.write("Supervisor running. Ctrl+C to stop all bots and exit.")
         try:
             while True:
                 self.reconcile()
-                moved = queue.requeue_stale(self.bcfg["claim_timeout_seconds"], self.bcfg["max_attempts"])
-                if moved:
-                    self.stdout.write(f"Returned {moved} stuck folder(s) to the queue")
-                if scan and time.monotonic() - last_scan >= self.bcfg["scan_every_seconds"]:
-                    last_scan = time.monotonic()
-                    for where, added in queue.scan_all(input_dir, cfg["processing"]["min_folder_age_seconds"]).items():
-                        if added:
-                            self.stdout.write(f"Queued {added} new folder(s) from {where}")
+                if time.monotonic() - last_stuck_check >= 30:
+                    last_stuck_check = time.monotonic()
+                    for name in STAGES:
+                        c = stage_queue.settings_of(name)
+                        back = stage_queue.return_stuck(name, c["stuck_after_minutes"], c["max_attempts"])
+                        if back:
+                            self.stdout.write(f"[{name}] returned {back} stuck item(s) to the line")
+                    routed = self.route_forgotten_folders()
+                    if routed:
+                        self.stdout.write(f"Routed {routed} folder(s) whose images were all finished")
                 time.sleep(opts["interval"])
         except KeyboardInterrupt:
             signal.signal(signal.SIGTERM, signal.SIG_IGN)   # a second stop signal must not cut this short
@@ -98,6 +97,12 @@ class Command(BaseCommand):
     def reconcile(self):
         now = timezone.now()
         bots = {b.id: b for b in Bot.objects.all()}
+
+        # Reader bots split the folders on disk: with 3 of them they get 1/3, 2/3 and 3/3.
+        # When you add or remove one, the numbers change, and running readers restart with theirs.
+        readers = sorted((b for b in bots.values() if b.stage == Bot.Stage.READER
+                          and b.desired_running and not b.delete_requested), key=lambda b: b.name)
+        self.shards = {b.id: f"{i}/{len(readers)}" for i, b in enumerate(readers, 1)}
 
         for bot in bots.values():
             proc = self.procs.get(bot.id)
@@ -121,6 +126,13 @@ class Command(BaseCommand):
                 continue
 
             # From here on, the bot SHOULD be running.
+            if alive and bot.stage == Bot.Stage.READER and bot.shard and bot.shard != self.shards.get(bot.id):
+                if bot.id not in self.restarting:          # finish the current scan, then restart
+                    self.restarting.add(bot.id)
+                    self.event(bot, f"Reader count changed: restarting as shard {self.shards.get(bot.id)}")
+                    proc.terminate()
+                continue
+
             if alive:
                 if self.heartbeat_stale(bot, now) and bot.state == Bot.State.RUNNING:
                     self.event(bot, "No heartbeat; restarting it", "warning")
@@ -130,7 +142,9 @@ class Command(BaseCommand):
             if proc is not None:                         # it had a process, and it died
                 code = proc.returncode
                 self.procs.pop(bot.id)
-                if code != 0:
+                if bot.id in self.restarting:              # a planned restart, not a crash
+                    self.restarting.discard(bot.id)
+                elif code != 0:
                     if not self.record_crash(bot, code):
                         continue                         # too many crashes: left switched off
             elif bot.state == Bot.State.RUNNING and not self.heartbeat_stale(bot, now):
@@ -144,10 +158,26 @@ class Command(BaseCommand):
 
     # ------------------------------------------------------------------ helpers
     def start(self, bot: Bot):
-        proc = subprocess.Popen([sys.executable, MANAGE_PY, "run_bot", bot.name])
+        # The child inherits ANPR_ENV and the database settings, so it uses the same database.
+        # --yes: the supervisor itself was already confirmed; a bot must never sit waiting for typing.
+        shard = self.shards.get(bot.id, "") if bot.stage == Bot.Stage.READER else ""
+        cmd = [sys.executable, "-m", "bots", "--stage", bot.stage, "--name", bot.name, "--yes"]
+        if shard:
+            cmd += ["--shard", shard]
+        proc = subprocess.Popen(cmd, cwd=PROJECT_ROOT)
         self.procs[bot.id] = proc
-        Bot.objects.filter(pk=bot.pk).update(state=Bot.State.STARTING, pid=proc.pid, last_heartbeat=timezone.now())
-        self.stdout.write(f"Started bot {bot.name} (pid {proc.pid})")
+        Bot.objects.filter(pk=bot.pk).update(state=Bot.State.STARTING, pid=proc.pid, shard=shard,
+                                             last_heartbeat=timezone.now())
+        self.stdout.write(f"Started {bot.stage} bot {bot.name}{' as shard ' + shard if shard else ''} (pid {proc.pid})")
+
+    def route_forgotten_folders(self, limit: int = 500) -> int:
+        """Normally the OCR bot that reads a folder's last image routes it. A folder can be
+        missed when its last image FAILED somewhere else (in preprocessing, or returned as stuck):
+        this sweep routes those, so no folder waits in 'reading' forever."""
+        from core.ocr_results import finish_folder
+        ids = list(IntakeFolder.objects.filter(stage="reading").values_list("id", flat=True)[:limit])
+        cfg = stage_queue.settings_of("ocr")
+        return sum(finish_folder(f, cfg) for f in stage_queue.folders_ready(ids))
 
     def record_crash(self, bot: Bot, code: int) -> bool:
         """Returns True if we should restart it, False if it crashed too often."""

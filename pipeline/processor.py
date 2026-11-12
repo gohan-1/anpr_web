@@ -1,7 +1,6 @@
 """
-Analyses ONE folder: every image goes straight to the plate (OCR) API.
-No local checks (no hashing, duplicates, readability or quality): the API decides.
-No database here, so it can run in any thread or process (bots and Prefect both use it).
+Sends ONE image to the plate (OCR) API: timed, with retries and the bot's rate limit.
+Used by the OCR stage (bots/handlers.py). No database here, so it runs in any thread.
 """
 from __future__ import annotations
 
@@ -57,9 +56,3 @@ def ocr_image(path: Path, api_cfg: dict, credentials=None, limiter=None) -> Imag
         item.error = f"{type(exc).__name__}: {exc}"
     item.seconds = time.perf_counter() - started
     return item
-
-
-def analyse_folder(folder: Path, cfg: dict, credentials=None, limiter=None) -> list[ImageAnalysis]:
-    """Every image of one folder, analysed. Raises only if the folder itself can't be read."""
-    return [ocr_image(path, cfg["api"], credentials, limiter)
-            for path in list_images(folder, cfg["paths"]["image_extensions"])]

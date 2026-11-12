@@ -18,7 +18,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from core.models import Folder, Image, Job
@@ -63,6 +63,8 @@ class Command(BaseCommand):
         parser.add_argument("--seed", type=int, default=7)
 
     def handle(self, *args, **opts):
+        if not settings.IS_LOCAL:
+            raise CommandError(f"seed_demo adds fake data, so it only runs on local, not on {settings.ANPR_ENV}.")
         rng = random.Random(opts["seed"])
         cfg = load_config()
         t = Thresholds.from_config({**cfg["decision"], "plate_regex": r"^[A-Z]{2}\d{2}[A-Z]{2}\d{4}$"})

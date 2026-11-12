@@ -1,3 +1,15 @@
+"""
+Reader service: the HTTP API around scanner.py.
+
+Run:   python -m services.reader --port 8101 --shard 1/1
+Docs:  open http://127.0.0.1:8101/docs  (FastAPI builds this page from the code below)
+
+HOW FASTAPI WORKS (the short version):
+  @app.get("/path") above a function = "call this function for GET /path".
+  Function arguments become query parameters (?limit=50) or URL parts (/folders/{folder_id}).
+  The `response_model` (a Pydantic class) describes the JSON that comes back; FastAPI
+  checks it and shows it in the /docs page, so the API documents itself.
+"""
 import functools
 import os
 import socket
@@ -11,7 +23,7 @@ from django.db import close_old_connections, connection
 from django.db.models import Count, Sum
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from core.models import IntakeFolder, IntakeImage
 from pipeline.config import load_config
@@ -21,7 +33,6 @@ from .scanner import Shard, load_sources, scan_source
 # ---------------------------------------------------------------- settings of this copy
 CFG = load_config()["reader"]
 SOURCES = load_sources(CFG, settings.PROJECT_ROOT)
-
 SHARD = Shard.parse(os.environ.get("READER_SHARD", "1/1"))
 INSTANCE = os.environ.get("READER_INSTANCE") or f"{socket.gethostname()}:{os.environ.get('READER_PORT', '?')}"
 EXTENSIONS = {e.lower() for e in CFG["image_extensions"]}
@@ -102,7 +113,7 @@ class FolderOut(BaseModel):
     source: str
     accuracy: str
     priority: int
-    status: str
+    stage: str
     image_count: int
     duplicate_count: int
     total_bytes: int
@@ -118,7 +129,7 @@ class StatsOut(BaseModel):
     total_folders: int
     total_images: int
     total_bytes: int
-    by_status: dict[str, int]
+    by_stage: dict[str, int]
     by_accuracy: dict[str, int]
     waiting_by_source: dict[str, int]
 
@@ -155,12 +166,14 @@ def scan():
 
 @app.get("/folders", response_model=list[FolderOut], summary="Registered folders, in pipeline order")
 @with_db
-def list_folders(status: str = Query("new", description="new, processing, done or failed"),
+def list_folders(stage: str | None = Query(None, description="reading, needs_llm, needs_trip, manual, done, failed..."),
                  accuracy: str | None = Query(None, description="low or high"),
                  source: str | None = None,
                  limit: int = Query(50, ge=1, le=500),
                  offset: int = Query(0, ge=0)):
-    qs = IntakeFolder.objects.filter(status=status)
+    qs = IntakeFolder.objects.all()
+    if stage:
+        qs = qs.filter(stage=stage)
     if accuracy:
         qs = qs.filter(accuracy=accuracy)
     if source:
@@ -180,7 +193,8 @@ def get_folder(folder_id: int):
     return {**folder_out(folder), "images": images}
 
 
-@app.get("/images/{image_id}/file", summary="The image file itself",responses={200: {"content": {"image/jpeg": {}}}})
+@app.get("/images/{image_id}/file", summary="The image file itself",
+         responses={200: {"content": {"image/jpeg": {}}}})
 @with_db
 def get_image_file(image_id: int):
     image = IntakeImage.objects.filter(pk=image_id).first()
@@ -203,7 +217,8 @@ def stats():
         "total_folders": totals["folders"] or 0,
         "total_images": totals["images"] or 0,
         "total_bytes": totals["size"] or 0,
-        "by_status": dict(IntakeFolder.objects.values_list("status").annotate(n=Count("id"))),
+        "by_stage": dict(IntakeFolder.objects.values_list("stage").annotate(n=Count("id"))),
         "by_accuracy": dict(IntakeFolder.objects.values_list("accuracy").annotate(n=Count("id"))),
-        "waiting_by_source": dict(IntakeFolder.objects.filter(status=IntakeFolder.Status.NEW).values_list("source").annotate(n=Count("id"))),
+        "waiting_by_source": dict(IntakeFolder.objects.filter(stage=IntakeFolder.Stage.READING)
+                                  .values_list("source").annotate(n=Count("id"))),
     }

@@ -1,9 +1,7 @@
 # All tunable values live here. Change them without touching code.
 
 paths:
-  input_dir: ./data          # one sub-folder per vehicle/event
-  output_dir: ./output       # accepted/ review/ no_plate/ failed/ created here
-  image_extensions: [".jpg", ".jpeg", ".png", ".bmp"]
+  output_dir: ./output       # Review page: approved/corrected folders are copied here
 
 api:
   url: "https://your-plate-api.example.com/recognize"
@@ -31,36 +29,22 @@ decision:
   max_consensus_boost: 0.09
   plate_regex: "^[A-Z0-9]{4,10}$"   # replace with your country's plate format
 
-processing:
-  max_parallel_images: 16        # how many images are processed at the same time
-  max_requests_per_second: 0     # cap on calls to the plate API (0 = no cap). Set this to your API's limit!
-  chunk_size: 200                # folders handled per batch, keeps memory steady with huge data
-  watch_interval_seconds: 60     # bot mode: how often to look for new folders
-  min_folder_age_seconds: 30     # bot mode: skip folders still being written by the camera
-
 bots:
-  heartbeat_seconds: 3           # how often each bot reports in
-  stale_after_seconds: 30        # no heartbeat for this long = bot is considered dead
-  claim_timeout_seconds: 600     # a folder claimed longer than this goes back to the queue
-  max_attempts: 3                # a folder that keeps crashing a bot is marked failed after this
-  max_concurrency: 64            # upper limit for a bot's concurrency setting
-  stop_grace_seconds: 60         # how long a bot gets to finish its folders when stopped
-  scan_every_seconds: 30         # supervisor --input: how often to look for new folders
-  use_prefect: true              # record every folder a bot processes as a Prefect flow run (needs the Prefect server)
-  help_shared_queue: true        # a bot with its own input folder also takes shared folders when it has spare room
-                                 # (its own folders always come first). false = it only ever takes its own folders
+  stale_after_seconds: 30        # no heartbeat for this long = the bot is considered dead and restarted
+  stop_grace_seconds: 60         # how long a bot gets to finish its batch when stopped
+  max_bots_per_stage: 50         # upper limit for the + button
 
 reader:
   # Where vehicle folders arrive. Lower priority number = processed first.
+  # For now every folder in ./data goes down the same line. The low/high accuracy split
+  # comes later: then replace this with two sources, e.g.
+  #   - {name: low-accuracy,  path: ./data/low_accuracy,  accuracy: low,  priority: 1}
+  #   - {name: high-accuracy, path: ./data/high_accuracy, accuracy: high, priority: 2}
   sources:
-    - name: low-accuracy
-      path: ./data/low_accuracy
-      accuracy: low
-      priority: 1
-    - name: high-accuracy
-      path: ./data/high_accuracy
+    - name: data
+      path: ./data
       accuracy: high
-      priority: 2
+      priority: 1
   image_extensions: [".jpg", ".jpeg", ".png", ".bmp"]
   min_folder_age_seconds: 30    # skip folders changed this recently (camera still writing)
   read_workers: 8               # folders read at the same time inside one reader copy
@@ -69,3 +53,38 @@ reader:
     - http://127.0.0.1:8101
   scan_timeout_seconds: 900
   scan_every_seconds: 60        # when the scan flow runs on a schedule (--serve)
+
+# ---------------------------------------------------------------- assembly line
+pipeline:
+  heartbeat_seconds: 3          # how often a bot reports in
+  idle_sleep_seconds: 2         # how long a bot waits when its line is empty
+  use_prefect: false            # true: each batch is recorded as a Prefect flow run (needs prefect server)
+
+stages:
+  reader:
+    scan_every_seconds: 30      # how often each reader bot scans its share of the folders
+  preprocess:
+    batch_size: 20              # items a bot takes at once
+    parallel: 8                 # items of a batch handled at the same time
+    max_attempts: 3             # then the item is marked failed
+    stuck_after_minutes: 10     # an item held this long by a silent bot goes back to the line
+    pause_if_next_line_over: 50000   # backpressure: wait while the OCR line is longer than this
+    placeholder_seconds: 0.05   # pretend work per item until the real service exists (step 3)
+  ocr:
+    trip_if_confidence_at_least: 0.85   # best plate this sure -> trip; less sure -> LLM; no plate -> manual review
+    batch_size: 20
+    parallel: 8
+    max_attempts: 3
+    stuck_after_minutes: 10
+  llm:
+    batch_size: 5
+    parallel: 3
+    max_attempts: 2
+    stuck_after_minutes: 15
+    placeholder_seconds: 0.2    # until step 5
+  trip:
+    batch_size: 20
+    parallel: 4
+    max_attempts: 3
+    stuck_after_minutes: 10
+    placeholder_seconds: 0.05   # until step 6

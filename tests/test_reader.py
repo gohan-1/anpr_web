@@ -17,7 +17,6 @@ TMP = Path(tempfile.mkdtemp())
 LOW, HIGH = TMP / "low", TMP / "high"
 
 # --- point the app at a test database and test sources BEFORE importing it ---
-os.environ["ANPR_DB_ENGINE"] = "sqlite"            # never the real database, even if main/.env says postgres
 os.environ["ANPR_DB_PATH"] = str(TMP / "test.sqlite3")
 cfg = yaml.safe_load(open(ROOT / "config" / "settings.yaml"))
 cfg["reader"]["sources"] = [
@@ -173,3 +172,17 @@ def test_stats():
     client.post("/scan")
     s = client.get("/stats").json()
     assert (s["total_folders"], s["by_accuracy"]) == (2, {"low": 1, "high": 1})
+
+
+def test_registered_images_enter_the_first_line():
+    make_folder(LOW, "car_1", contents=(b"same", b"same", b"other"))
+    make_folder(HIGH, "car_2")
+    (LOW / "empty_car").mkdir()
+    scan()
+    scan(Source("high-accuracy", HIGH, "high", 2))
+    stages = {(i.folder.name, i.file_name): (i.stage, i.priority) for i in IntakeImage.objects.all()}
+    assert stages[("car_1", "cam_0.jpg")] == ("new", 1)
+    assert stages[("car_1", "cam_1.jpg")] == ("skipped", 1)      # duplicate: never processed
+    assert stages[("car_2", "cam_0.jpg")] == ("new", 2)          # high accuracy: after low
+    folders = dict(IntakeFolder.objects.values_list("name", "stage"))
+    assert folders == {"car_1": "reading", "car_2": "reading", "empty_car": "manual"}

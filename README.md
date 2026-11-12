@@ -1,6 +1,6 @@
 # ANPR
 
-Automatic number-plate reading. Cameras drop one folder of images per vehicle; **bots** send each image to a private **OCR API**, and the plate text and confidence are stored in **PostgreSQL** and shown in a **web app**.
+Automatic number-plate reading. Cameras drop one folder of images per vehicle. The folders go down an **assembly line** of stages (reading → preprocessing → OCR → LLM → trip); each stage has its own **bots**. OCR bots send each image to a private **OCR API**; plates, confidence and timing are stored in **PostgreSQL** and shown in a **web app**.
 
 - **How to use it**: this file.
 - **How it works inside** (queue, bots, Prefect, reader service, storage, growth): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -15,6 +15,7 @@ Automatic number-plate reading. Cameras drop one folder of images per vehicle; *
 2. [Everyday commands](#2-everyday-commands)
 3. [Using the web app](#3-using-the-web-app)
 4. [Bots: create, start, stop, delete](#4-bots-create-start-stop-delete)
+   - [The assembly line (Pipeline page)](#the-assembly-line-pipeline-page)
 5. [The reader service](#5-the-reader-service)
 6. [Settings](#6-settings)
 7. [Timing report](#7-timing-report)
@@ -75,7 +76,7 @@ make start
   +  Web app                      http://127.0.0.1:5173
 ```
 
-Open **http://127.0.0.1:5173**, log in, go to **Bots**, add a bot and press **Start**.
+Open **http://127.0.0.1:5173**, log in, go to **Pipeline** and press **+** on every stage (or create bots with their own names and API accounts on the **Bots** page).
 
 > **Mock mode is on by default** (`api.mock: true` in `config/settings.yaml`): plates are fake. See [Settings](#6-settings) to connect the real OCR API.
 
@@ -88,14 +89,14 @@ Run them from `~/Anpr/main`. `make` alone lists them all.
 | Command | What it does |
 |---|---|
 | `make start` | Start every service in the background (and apply any new migrations first) |
-| `make stop` | Stop every service. Bots finish the folders they are working on first (up to 90 s) |
+| `make stop` | Stop every service. Bots finish their current batch first (up to 90 s) |
 | `make restart` | Stop + start. **Needed after changing Python code or `settings.yaml`** |
 | `make status` | Which services are running |
-| `make bots` | Every bot: switched on or off, really running or not, input folder, counters; plus the queue |
+| `make bots` | Every bot: stage, switched on or off, really running or not, API account or shard, counters; plus every stage's line |
 | `make logs` | Follow all logs live (Ctrl+C to leave) |
 | `make start-<service>` / `stop-<service>` / `restart-<service>` / `logs-<service>` | The same for one service |
 | `make test` | All checks and tests (see [Testing](#7-testing)) |
-| `make report` | How long a folder and one image take, per bot, slowest ones (see [Timing report](#7-timing-report)) |
+| `make report` | How long a folder and one image take, per OCR bot, slowest ones (see [Timing report](#7-timing-report)) |
 | `make prune-prefect DAYS=30` | Delete Prefect run history older than 30 days |
 | `make reprocess FOLDER="ocr_4393072 …"` | Process some folders again (see [Starting over](#starting-over)) |
 | `make reset` | Delete **all** results and start again from scratch (see [Starting over](#starting-over)) |
@@ -104,10 +105,10 @@ The services, in start order:
 
 | Service | Port | What it is |
 |---|---|---|
-| `prefect` | 4200 | Prefect server and dashboard. Records every folder a bot processes |
+| `prefect` | 4200 | Prefect server and dashboard. Runs the reader scan; records batches when `pipeline.use_prefect: true` |
 | `web` | 8000 | Django REST API, used by the web app |
 | `reader` | 8101 | Reader service (FastAPI): registers new folders in the intake tables |
-| `supervisor` | – | Finds new folders, queues them, starts / stops / restarts the bots |
+| `supervisor` | – | Starts / stops / restarts every bot so it matches the Bots table; returns stuck items to their line |
 | `scan` | – | Prefect flow that asks the reader service to scan every 60 s |
 | `frontend` | 5173 | The web app (React, Vite) |
 
@@ -115,22 +116,22 @@ Logs and pid files are in `main/.run/` (e.g. `main/.run/supervisor.log`).
 
 ### Starting over
 
-A folder is processed only once: its row in the queue (`WorkItem`) remembers it. To process folders again, their queue row and old results must be deleted, and these commands do exactly that:
+A folder is processed only once: its registration (`IntakeFolder`) remembers it. To process folders again, their registration and old results must be deleted, and these commands do exactly that:
 
 | You want to… | Run | What happens |
 |---|---|---|
-| process **some folders** again (e.g. after fixing the OCR API) | `make reprocess FOLDER="ocr_4393072 ocr_4393075"` | Their queue rows and results are deleted; the running supervisor queues them again within 30 s. No restart. Folders a bot is working on right now are skipped |
+| process **some folders** again (e.g. after fixing the OCR API) | `make reprocess FOLDER="ocr_4393072 ocr_4393075"` | Their registration and results are deleted; the next reader scan registers them again and they go down the whole line. No restart. Folders a bot is working on right now are skipped |
 | start **everything** from scratch | `make reset` | Asks for `yes`, stops all services, deletes all results, empties the Prefect history, starts everything; all folders are processed again |
 
 What is deleted and what is kept:
 
 | Deleted | Kept |
 |---|---|
-| queue (`WorkItem`), results (`Folder`, `Image`), bot logs (`BotEvent`), reader intake tables, old jobs, Prefect history (`make reset` only) | bots with their API logins and input folders (counters reset to 0), user accounts, **all image files** |
+| registrations and lines (`IntakeFolder`, `IntakeImage`), results (`Folder`, `Image`), bot logs (`BotEvent`), stage speeds, old jobs, Prefect history (`make reset` only) | bots with their API accounts (counters reset to 0), stage settings, user accounts, **all image files** |
 
 There is no undo. Back up first if you may want the old results: `pg_dump -h localhost -U anpr -Fc anpr > backup.dump`. Without make: `cd web && python manage.py reset_results [--folder NAME …] [--yes]`.
 
-Don't delete rows by hand (DBeaver, SQL): deleting only `Folder` leaves the queue row, so nothing is processed again; deleting only `WorkItem` processes the folder again but keeps the old results next to the new ones.
+Don't delete rows by hand (DBeaver, SQL): deleting only `Folder` leaves the registration, so nothing is processed again; deleting only `IntakeFolder` processes the folder again but can leave old results.
 
 You can still run any service by hand in a terminal instead, for example `cd web && python manage.py runserver`. `make start` notices a port that's already taken and won't start a second copy. It also refuses to start a second supervisor, because two supervisors would run every bot twice.
 
@@ -142,9 +143,12 @@ You can still run any service by hand in a terminal instead, for example `cd web
 
 | Page | What you do there |
 |---|---|
-| **Overview** | Counts and charts of processed folders |
-| **Folders** | Every processed vehicle folder: plate, confidence, bot. Click one to see each image and what the OCR API returned for it |
-| **Bots** | Add, start, stop, delete bots; choose a bot's input folder; see the queue; retry failed folders |
+| **Overview** | The assembly line at a glance (one tile per stage), then counts and charts of processed folders |
+| **Pipeline** | The assembly line: per stage its waiting line, speed and bots. **+ / −** bots per stage, start/stop/remove single bots and read their events, change stage settings, see and retry failed items |
+| **Folders** | Every folder the OCR has read: best plate, confidence, which OCR bot(s). Click one to see each image and what the OCR API returned for it |
+| **Bots** | Every bot of every stage: add one (choose its stage, name, API account, rate limit), start, stop, edit its account, remove; filter by stage; each bot's events and last error |
+
+The sidebar shows which environment and database the app is connected to (**LOCAL**, **STAGING**, **PRODUCTION**). On a read-only connection a yellow banner says so and every change is refused by the server.
 
 To add more logins: `make superuser`, or the Django admin at http://127.0.0.1:8000/admin/.
 
@@ -160,50 +164,70 @@ python manage.py changepassword NAME      # set a new password
 
 ## 4. Bots: create, start, stop, delete
 
-A **bot** is one worker process with its own OCR API account. Several bots work in parallel; the database guarantees two bots never get the same folder.
+A **bot** is one worker process that belongs to **one stage** of the assembly line. Several bots per stage work in parallel; the database guarantees two bots never take the same item.
 
-**Bots are managed from the Bots page; the supervisor does the rest automatically.** You never start a bot process by hand.
+```
+reader ─► [new images] ─► preprocess ─► [cleaned] ─► OCR ─► [read]
+                                                      │ all images of a folder read:
+                                                      ▼ the folder is routed by confidence
+                                 [needs_trip]   [needs_llm] ─► LLM ─► needs_trip or manual
+                                      ▼                                [manual] → a person
+                                    trip ─► [done]
+```
 
-| You do (Bots page) | What happens |
+| Stage | What its bots do | Real or placeholder |
+|---|---|---|
+| **Reading** | Find new vehicle folders in `reader.sources` (now `./data`), register them and their images | Real |
+| **Preprocessing** | Clean each image for OCR | Placeholder (passes the image on) |
+| **OCR** | Send each image to the OCR API with **the bot's own account and rate limit**, with retries; save plate, confidence, time. When all images of a folder are read: best plate ≥ `trip_if_confidence_at_least` (0.85) → trip; a less sure plate → LLM; no plate → manual review. The folder's result appears on the **Folders** page | Real (`api.mock: true` gives fake plates) |
+| **LLM** | Decide the folders OCR wasn't sure about | Placeholder |
+| **Trip** | Create the trip | Placeholder |
+
+**Bots are managed in the web app; the supervisor does the rest automatically.** You never start a bot process by hand.
+
+| You do | What happens |
 |---|---|
-| **Add bot**: name, API username and password, concurrency, optional input folder | A row in the `Bot` table, switched **off**. The password is stored encrypted and never shown again |
-| **Start** | The bot is marked "should run". Within 2 s the supervisor starts its process; the state goes *Starting* → *Running* |
-| **Stop** | The bot finishes its current folders, then exits. State → *Stopped*. Its unfinished folders go back to the queue |
-| **Delete** | The bot stops as above, then its row is removed. **Its results are kept** |
-| **Input folder → Browse…** | The bot only processes folders inside that folder. See below |
+| **Bots → Add bot**: stage, name, (OCR) API username, password and rate limit | A row in the `Bot` table. The password is stored encrypted and never shown again. "Start it right away" switches it on |
+| **Pipeline → +** on a stage | The same, quickly: a bot named `ocr-3` etc., switched on, no API account (fine while the API is mocked) |
+| **Start** | Within 2 s the supervisor starts its process; *Starting* → *Running* |
+| **Stop** | The bot finishes its current batch, then exits. Items it took but didn't start go back to the line |
+| **Remove** (or **−** on the Pipeline page, which removes the newest) | The bot stops as above, then its row is removed. **Its results are kept** |
+| **Edit**: API account, rate limit | Applies from the bot's next batch, no restart. A bot's stage can't change: remove it and add one to the other stage |
 
 What runs automatically, without you doing anything:
 
-- **New folders** are found every 30 s and queued.
+- **New folders** are found by the reader bots (every `scan_every_seconds`) and by the scheduled reader scan.
 - **A bot that crashes** is restarted. If it crashes more than 5 times in 10 minutes it is switched off, and its last error is shown.
 - **A bot that hangs** (no heartbeat for 30 s) is killed and restarted.
-- **A folder whose bot died** goes back to the queue. After 3 failed attempts it is marked *failed*; use **Retry failed** on the Bots page.
+- **Items held by a dead bot** go back to their line after `stuck_after_minutes`. An item that keeps failing is marked *failed* after `max_attempts`; retry it on the Pipeline page, tab **Failed**.
+- **An OCR bot without an API account** while the API is real (`api.mock: false`) waits and says so in its events, instead of failing images.
+- **Reader bots** share the folders by **shard** (1/3, 2/3, 3/3); adding or removing one renumbers them.
 - **Whenever the supervisor starts** (`make start`, `make restart`), every bot that was switched on is started again. After a reboot, run `make start`.
+
+### The Pipeline page
+
+| You want to | Do this |
+|---|---|
+| Process faster where a line grows | Press **+** on that stage. A yellow bar on a card means *items waiting but no bots* or *line growing* |
+| Slow down / stop a stage | Press **−**: the newest bot finishes its batch and is removed. At 0 the line just waits |
+| Stop or restart one bot | Click the stage, tab **Bots**, then **Stop / Start / Remove** (or use the Bots page) |
+| Change batch size, items at the same time, tries, stuck timeout, backpressure, reader scan interval, the OCR's "straight to trip" confidence | Tab **Settings**, **Save**. Bots use the new value from their next batch, no restart. **reset** goes back to the `settings.yaml` default |
+| Retry failures | Tab **Failed**: every item that failed in this stage with its error; **Retry selected** or **Retry all**. Images go back to the line they failed in and their folder is decided again |
 
 **How many bots are running?** Run `make bots`:
 
 ```
-BOT           WANTED  STATE     ALIVE  PID        DONE  FAILED  RESTARTS  INPUT FOLDER
-bot-1         on      running   yes    17118         1       0         0  /home/…/data/gate1
-bot-2         on      running   yes    17117         2       0         0  (shared queue)
+BOT             STAGE       WANTED  STATE     ALIVE  PID   DONE  FAILED  RESTARTS  ACCOUNT / SHARD
+reader-1        reader      on      running   yes    101      0       0         0  shard 1/1
+ocr-1           ocr         on      running   yes    102   1297       0         0  acct1, 2 calls/s
 
-2 bot(s): 2 switched on, 2 actually running (heartbeat in the last 30s).
+Assembly line:
+  STAGE            WAITING  WORKING  PER MIN  BOTS ON
+  OCR                  157       20    839.5        1
+  LLM                   91        0      0.0        0   <- items waiting, no bots
 ```
 
-*WANTED* is what you chose on the Bots page; *STATE* and *ALIVE* are what is really happening. "Switched on but not running" means the supervisor isn't running: `make start-supervisor`.
-
-### Which bot gets which folder
-
-| Bot's input folder | It processes |
-|---|---|
-| empty | the **shared queue**: vehicle folders in `paths.input_dir` (default `main/data/`) |
-| a folder of vehicle folders (`data/gate1/`) | every vehicle folder in it, now and when new ones arrive; **plus shared folders when it has spare room** |
-| one vehicle folder (`data/gate1/ocr_4393075/`) | that folder; **plus shared folders when it has spare room** |
-
-- **Every folder gets processed as long as at least one bot is switched on.** A bot always takes its own folders first; with spare room it helps with the shared queue (`bots.help_shared_queue: true`). Set it to `false` if a bot must only ever touch its own folder; shared folders then need a bot *without* an input folder, and `make bots` warns when there is none.
-- A bot never takes **another bot's** folders.
-- Two bots can't have the same input folder.
-- A folder is processed **once**, however many bots run in parallel. Choosing a folder that was already processed does nothing.
+*WANTED* is what you chose in the web app; *STATE* and *ALIVE* are what is really happening. "Switched on but not running" means the supervisor isn't running: `make start-supervisor`.
 
 ---
 
@@ -239,63 +263,47 @@ The settings you're most likely to change:
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `api.mock` | `true` | `true` = fake OCR replies for testing. **Set `false` for real results** |
+| `api.mock` | `true` | `true` = fake OCR replies for testing. **Set `false` for real results** (OCR bots then need an API account) |
 | `api.url` | placeholder | The OCR API address |
 | `api.timeout_seconds`, `api.retries`, `api.retry_delay_seconds` | 15, 3, 5 | Per image |
-| `paths.input_dir` | `./data` | Folder for the shared queue |
-| `paths.browse_roots` | `input_dir` | Folders the **Browse…** dialog may open. Add camera mounts here |
-| `bots.use_prefect` | `true` | Record every folder as a Prefect flow run. `false` = no Prefect history (saves disk) |
-| `bots.help_shared_queue` | `true` | Bots with their own input folder also take shared folders when they have spare room |
-| `bots.scan_every_seconds` | 30 | How often new folders are looked for |
-| `bots.max_attempts` | 3 | Tries before a folder is marked failed |
+| `reader.sources` | `./data` | Where vehicle folders arrive (the low/high accuracy split comes later) |
+| `reader.min_folder_age_seconds` | 30 | Skip folders changed this recently (camera still writing) |
+| `stages.<stage>.*` | see file | **Defaults** for batch size, items at the same time, tries, stuck timeout, backpressure; `stages.ocr.trip_if_confidence_at_least` (0.85). Change them live on the Pipeline page instead |
+| `pipeline.use_prefect` | `false` | `true` = record every batch as a Prefect flow run |
 | `bots.stale_after_seconds` | 30 | No heartbeat this long = bot considered dead |
-| `processing.min_folder_age_seconds` | 30 | Skip folders changed this recently (camera still writing) |
-| `reader.sources` | 2 folders | Folders the reader service watches, with accuracy and priority |
+| `bots.max_bots_per_stage` | 50 | Upper limit for the **+** button |
 
-Each bot logs in to the OCR API with **its own** username and password (set on the Bots page). Relative paths in `settings.yaml` start from `main/`.
+Each OCR bot logs in to the OCR API with **its own** username and password (set on the Bots page). Relative paths in `settings.yaml` start from `main/`.
 
 ---
 
 ## 7. Timing report
 
-How long does one folder take? One image? Which bot is slower? Which images are slowest?
+How long does one folder take? One image? Which OCR bot is slower? Which images are slowest?
 
 ```bash
 make report                      # last 24 hours, all bots, on screen
 make report SINCE=7d             # last 7 days   (also 30m, 6h, all)
-make report BOT=bot-1            # one bot
+make report BOT=ocr-1            # one OCR bot
 make report-files                # same, and saved to main/reports/: .html (to share) + 2 .csv (Excel)
 ```
 
-Without make: `cd web && python manage.py report --since 24h --bot bot-1 --top 10 --out /some/folder/name`.
-
-What it contains:
+Without make: `cd web && python manage.py report --since 24h --bot ocr-1 --top 10 --out /some/folder/name`.
 
 | Section | Shows |
 |---|---|
-| **Summary** | Folders finished (done/failed), images sent, API errors, retries, busy time, **throughput** (folders per hour while at least one folder was running, so idle time doesn't count), queue right now |
-| **Timing** | count, average, min, median, p95 and max for: **folder** time, **queue wait**, **one image**, and **all images of a folder added up** |
-| **Per bot** | Folders, images, folder and image average and p95, failures, per bot |
-| **Slowest folders / images** | The 5 slowest (`--top N` for more), with bot, OCR calls and result |
-
-What each time means:
+| **Summary** | Folders read by OCR (and how many went to trip / LLM / manual), images read and failed, retries, busy time, **throughput** (folders per hour while at least one folder was in the line), every line right now |
+| **Timing** | count, average, min, median, p95 and max for: **folder** (found → all images read), **folder to done** (found → trip created), **one image**, **all images of a folder added up** |
+| **Per OCR bot** | Images, folders, image average and p95, retries |
+| **Slowest folders / images** | The 5 slowest (`--top N` for more) |
 
 | Time | From → to | Stored in |
 |---|---|---|
-| **Folder** | a bot starts the folder → its results are saved | `WorkItem.claimed_at` → `finished_at` |
-| **Queue wait** | the folder is found → a bot starts it | `WorkItem.created_at` → `claimed_at` |
-| **One image** | rate-limit wait + reading the file + OCR call + retries | `Image.duration_ms` (and `Image.api_attempts`) |
+| **Folder** | a reader found it → its last image was through OCR (includes waiting in lines) | `IntakeFolder.discovered_at` → `read_at` |
+| **Folder to done** | found → trip created | `discovered_at` → `finished_at` |
+| **One image** | rate-limit wait + reading the file + OCR call + retries | `IntakeImage.duration_ms` (and `api_attempts`) |
 
-How to read it:
-
-- **p95** = 95 % of folders/images were faster than this. Use it, not the max, to judge normal speed.
-- **Folder ≈ images added up**: the images were sent one after another and nothing else costs time (Prefect off).
-- **Folder < images added up**: the images were sent in parallel (Prefect on).
-- **Folder much bigger than both**: time is lost outside the OCR calls, e.g. Prefect bookkeeping under load. Compare `bots.use_prefect: true` and `false`.
-- **Image time high, OCR calls > 1**: the API failed and was retried (each retry waits `api.retry_delay_seconds`).
-- **Long queue wait**: not enough bots, or no switched-on bot for those folders.
-
-The HTML file is a self-contained page you can e-mail or open in a browser. The CSV files have one row per folder (`_folders.csv`) and one row per image (`_images.csv`) for your own analysis. Images processed before timing was added (11 Nov 2026) have no image time; they still count in the totals.
+How to read it: **p95** = 95 % were faster than this, use it rather than the max. A long **folder** time with short **image** times means items wait in a line: add bots to the stage whose line grows (Pipeline page). High image time with OCR calls > 1 means the API failed and was retried.
 
 ---
 
@@ -308,18 +316,17 @@ make test          # all of the below
 | Command | Tests | Time | Touches your data? |
 |---|---|---|---|
 | `make check` | Django configuration; models and migrations agree | 2 s | No |
-| `make test-unit` | 36 Django tests (queue, claims, bot folders, saving results, browse, reset) and 31 pytest tests (reader service, rate limiter, old decision rules) | 10 s | No: throwaway SQLite databases |
-| `make test-e2e` | The real API, supervisor, bot processes, timing report and reader service, driven like the browser drives them | ~2 min | No: own SQLite file, copies of 9 folders, own ports, mock OCR |
+| `make test-unit` | 52 Django tests (Bots API and accounts, review, reset, environments/read-only, the assembly line: 8 bots taking from one line, OCR results and routing by confidence, API failures and retries, live account/rate-limit changes, backpressure, Pipeline API, settings, retry) and 33 pytest tests (reader service, rate limiter, decision rules) | 15 s | No: throwaway SQLite databases |
+| `make test-e2e` | The real API, supervisor, stage bots, timing report and reader service, driven like the browser drives them | ~2 min | No: own SQLite file, copies of 9 folders, own ports, mock OCR |
 
-What `make test-e2e` proves (42 checks):
+What `make test-e2e` proves (46 checks):
 
-- **Login and security:** wrong password rejected, API closed without login, Browse refuses `/etc`, passwords never returned and stored encrypted.
-- **Bots:** create a shared bot and a bot with its own folder; they start switched off; a second bot on the same folder is rejected.
-- **Processing:** the supervisor queues folders; nothing is processed until **Start**; then every folder is processed exactly once; a bot's own folders only by that bot; shared folders still processed when only a bot with its own folder is running; plate and confidence saved and visible in the API.
-- **Timing report:** every image has its time and OCR call count; the report shows folder and image timing; HTML and CSV files are written with one row per folder.
-- **Automation:** a folder added later is processed automatically; a bot killed with `kill -9` is restarted and the restart is counted.
-- **Stop and delete:** **Stop** ends the process; **Delete** removes the bot and keeps its results; stopping the supervisor stops its bots.
+- **Login and security:** wrong password rejected, API closed without login, the environment endpoint never shows a password.
 - **Reader service:** health, scan, no double registration, folders, image file, stats, read-only mode; and the Prefect `scan-sources` flow, when the Prefect server is running.
+- **Bots page:** an OCR bot with its own API account (password never returned, stored encrypted); duplicate names and half accounts rejected; bots start switched off.
+- **The whole line:** nothing happens until bots are on; **+** answers with the updated overview; the supervisor starts all 7 bots; readers get shards 1/2 and 2/2; every folder goes down the whole line; every image is read by the OCR bot with plate and timing; no image is handled twice; every read folder has its result on the Folders page with its routing reason; speeds and the timing report work.
+- **Live changes and automation:** stage settings saved (bad values refused); a rate-limit change reaches the running bot; a folder arriving later is processed; a bot killed with `kill -9` is restarted and counted; `reset_results --folder` makes a folder go down the line again.
+- **Stop and remove:** **Stop** ends the process; **Remove** deletes the bot and keeps its results; **−** renumbers the readers and removes a stage's bots; stopping the supervisor stops its bots.
 
 The unit tests use SQLite because the `anpr` PostgreSQL user may not be allowed to create the temporary test database. To run the Django tests on PostgreSQL instead, give it that right once (`ALTER USER anpr CREATEDB;`), then: `cd web && python manage.py test core`.
 

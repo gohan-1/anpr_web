@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Bot, BotEvent, Folder, Image, IntakeFolder, IntakeImage, Job, WorkItem
+from .models import Bot, BotEvent, Folder, Image, IntakeFolder, IntakeImage, Job, StageMinute, StageSettings
 
 
 class ImageInline(admin.TabularInline):
@@ -35,16 +35,14 @@ class ImageAdmin(admin.ModelAdmin):
 
 @admin.register(Bot)
 class BotAdmin(admin.ModelAdmin):
-    list_display = ("name", "state", "desired_running", "concurrency", "processed", "failed", "last_heartbeat", "host")
-    list_filter = ("state", "desired_running")
+    list_display = ("name", "stage", "shard", "state", "desired_running", "processed", "failed", "last_heartbeat", "host")
+    list_filter = ("stage", "state", "desired_running")
     exclude = ("api_password_encrypted",)   # never show the encrypted password
 
 
-@admin.register(WorkItem)
-class WorkItemAdmin(admin.ModelAdmin):
-    list_display = ("path", "status", "bot_name", "attempts", "claimed_at", "finished_at")
-    list_filter = ("status", "bot_name")
-    search_fields = ("path",)
+@admin.register(StageSettings)
+class StageSettingsAdmin(admin.ModelAdmin):
+    list_display = ("stage", "values", "updated_at", "updated_by")
 
 
 @admin.register(BotEvent)
@@ -56,14 +54,33 @@ class BotEventAdmin(admin.ModelAdmin):
 class IntakeImageInline(admin.TabularInline):
     model = IntakeImage
     extra = 0
-    fields = ("file_name", "size_bytes", "sha256", "is_duplicate", "modified_at")
+    fields = ("file_name", "stage", "plate", "confidence", "read_by", "attempts", "is_duplicate", "last_error")
     readonly_fields = fields
     can_delete = False
 
 
 @admin.register(IntakeFolder)
 class IntakeFolderAdmin(admin.ModelAdmin):
-    list_display = ("name", "source", "accuracy", "priority", "status", "image_count", "discovered_at", "discovered_by")
-    list_filter = ("status", "accuracy", "source")
+    list_display = ("name", "stage", "plate", "confidence", "route_reason", "image_count", "discovered_at")
+    list_filter = ("stage", "accuracy", "source")
     search_fields = ("name", "path")
     inlines = [IntakeImageInline]
+    
+# print(Route)
+# @admin.register(Route)
+# # class RouteAdmin(admin.ModelAdmin):
+# #     # list_display = ("name", "description", "created_at", "updated_at")
+# #     # search_fields = ("name", "description")
+    
+@admin.register(StageMinute)
+class StageMinuteAdmin(admin.ModelAdmin):
+    # One row per stage per minute: how many items it finished (done) and failed.
+    list_display = ("stage", "minute", "done", "failed")
+    list_filter = ("stage",)
+    ordering = ("-minute",)
+    
+# @admin.register(StageSettings)
+# class StageSettingsAdmin(admin.ModelAdmin):
+#     list_display = ("stage", "settings", "updated_at", "updated_by")
+#     list_filter = ("stage",)
+    

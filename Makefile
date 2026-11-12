@@ -85,7 +85,7 @@ test-e2e:  ## Real API + supervisor + bots + reader in a sandbox (~2 min; real d
 # ---------------------------------------------------------------- reports
 REPORT_ARGS = --since $(or $(SINCE),24h) $(if $(BOT),--bot $(BOT))
 
-report:  ## Timing report on screen. Options: SINCE=24h|7d|30m|all  BOT=bot-1
+report:  ## Timing report on screen. Options: SINCE=24h|7d|30m|all  BOT=ocr-1
 	@$(MANAGE) report $(REPORT_ARGS)
 
 report-files:  ## Same report, also saved as HTML + 2 CSV files in main/reports/
