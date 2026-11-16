@@ -11,6 +11,13 @@ The bot loop, one for every stage.
 
 A separate thread sends a heartbeat every few seconds, so the supervisor knows the bot
 is alive even while it works on a long batch.
+
+Two ways bots are run (settings ANPR_BOTS_MANAGED_BY):
+  supervisor  the supervisor starts this process; Stop in the web app = finish the batch and EXIT
+  docker      this process IS the container; Stop in the web app = PAUSE (stay alive, take no
+              work), because an exited container would just be restarted by Docker.
+              The container's BOT_API_USERNAME / BOT_API_PASSWORD / BOT_RATE_LIMIT, if set,
+              become the bot's API account and rate limit when it starts.
 """
 from __future__ import annotations
 
@@ -22,6 +29,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from django.conf import settings
 from django.db import close_old_connections, connection
 from django.db.models import F
 from django.utils import timezone
@@ -51,6 +59,10 @@ class BaseBot:
     def _on_signal(self, *_):
         self.stopping = True
 
+    @property
+    def in_docker(self) -> bool:
+        return settings.BOTS_MANAGED_BY == "docker"
+
     # ---------------------------------------------------------------- bot row + heartbeat
     def register(self, shard: str = "") -> None:
         bot, created = Bot.objects.get_or_create(
@@ -58,6 +70,7 @@ class BaseBot:
         if bot.stage != self.stage:
             raise SystemExit(f"Bot '{self.name}' belongs to stage '{bot.stage}', not '{self.stage}'.")
         self.bot_id = bot.id
+        self.account_from_environment(bot)
         Bot.objects.filter(pk=bot.id).update(
             state=Bot.State.RUNNING, pid=os.getpid(), host=socket.gethostname(), shard=shard,
             started_at=timezone.now(), last_heartbeat=timezone.now(), last_error="", current_task="")
@@ -74,13 +87,46 @@ class BaseBot:
                 pass                              # a missed heartbeat is not worth crashing for
         connection.close()
 
+    def account_from_environment(self, bot: Bot) -> None:
+        """Docker: the container's environment sets the API account and rate limit."""
+        username, password = os.environ.get("BOT_API_USERNAME", ""), os.environ.get("BOT_API_PASSWORD", "")
+        rate = os.environ.get("BOT_RATE_LIMIT", "")
+        if not (username or rate):
+            return
+        if username and password:
+            bot.api_username = username
+            bot.set_password(password)
+        if rate:
+            bot.rate_limit = float(rate)
+        bot.save(update_fields=["api_username", "api_password_encrypted", "rate_limit"])
+
     def should_stop(self) -> bool:
+        """True when the process must end. In Docker mode Stop/Start in the web app only pause
+        (see wait_while_paused); the process ends only when its container is stopped."""
         if self.stopping:
             return True
         row = Bot.objects.filter(pk=self.bot_id).values("desired_running", "delete_requested").first()
-        if row is None or not row["desired_running"] or row["delete_requested"]:
+        if row is None or row["delete_requested"] or (not row["desired_running"] and not self.in_docker):
             self.stopping = True
         return self.stopping
+
+    def wait_while_paused(self) -> bool:
+        """Docker mode: while switched off in the web app, stay alive and idle.
+        Returns True if the bot was paused (the caller then checks again)."""
+        if not self.in_docker:
+            return False
+        if Bot.objects.filter(pk=self.bot_id, desired_running=False).exists():
+            if not getattr(self, "_paused", False):
+                self._paused = True
+                Bot.objects.filter(pk=self.bot_id).update(state=Bot.State.STOPPED, current_task="Paused from the web app")
+                log(self.bot_id, "Paused: takes no work until Start is pressed")
+            self.nap(self.pipe["idle_sleep_seconds"])
+            return True
+        if getattr(self, "_paused", False):
+            self._paused = False
+            Bot.objects.filter(pk=self.bot_id).update(state=Bot.State.RUNNING, current_task="")
+            log(self.bot_id, "Resumed")
+        return False
 
     def set_task(self, text: str) -> None:
         Bot.objects.filter(pk=self.bot_id).update(current_task=text[:500])
@@ -111,9 +157,15 @@ class StageBot(BaseBot):
     def run(self) -> None:
         self.register()
         Bot.objects.filter(pk=self.bot_id).update(state=Bot.State.RUNNING)
+        # Items still held under this bot's name come from its previous run (it crashed, or its
+        # container restarted): give them back now instead of waiting stuck_after_minutes.
+        if back := stage_queue.reclaim(self.stage, self.name, self.scfg["max_attempts"]):
+            log(self.bot_id, f"Gave back {back} item(s) held by this bot before it restarted", "warning")
         batches = 0
         try:
             while not self.should_stop():
+                if self.wait_while_paused():
+                    continue
                 self.scfg = stage_queue.settings_of(self.stage)    # changes on the Pipeline page apply here
                 if not self.refresh_account():
                     self.set_task("Waiting: this OCR bot has no API account (set it on the Bots page)")
@@ -169,8 +221,16 @@ class StageBot(BaseBot):
     def process(self, items, batch_no: int) -> list[Outcome]:
         payloads = [payload_of(self.spec.level, i) for i in items]
         if self.pipe.get("use_prefect"):
-            from .prefect_batch import run_batch          # only imported when Prefect is used
-            return run_batch(self.stage, self.name, batch_no, payloads, self.scfg)
+            from .prefect_batch import prefect_reachable, run_batch   # only imported when Prefect is used
+            if prefect_reachable():
+                if getattr(self, "_prefect_down", False):
+                    self._prefect_down = False
+                    log(self.bot_id, "Prefect is reachable again: batches are recorded there again")
+                return run_batch(self.stage, self.name, batch_no, payloads, self.scfg)
+            if not getattr(self, "_prefect_down", False):     # say it once, not every batch
+                self._prefect_down = True
+                log(self.bot_id, "Prefect server not reachable: working WITHOUT recording batches in Prefect "
+                                 "(start it, or set pipeline.use_prefect: false)", "warning")
 
         def safe(p):
             try:
@@ -217,17 +277,30 @@ class ReaderBot(BaseBot):
         super().__init__(name, "reader")
         from services.reader.scanner import Shard, load_sources
         from django.conf import settings
-        self.shard = Shard.parse(shard)
+        self.shard = Shard.parse(shard or "1/1")
         rcfg = self.cfg["reader"]
         self.sources = sorted(load_sources(rcfg, settings.PROJECT_ROOT), key=lambda s: s.priority)
         self.rcfg = rcfg
         self.every = stage_queue.settings_of("reader").get("scan_every_seconds", 30)
 
+    def follow_assigned_shard(self) -> None:
+        """Docker mode: the housekeeper numbers the alive readers (1/3, 2/3, 3/3) in the database."""
+        if not self.in_docker:
+            return
+        from services.reader.scanner import Shard
+        assigned = Bot.objects.filter(pk=self.bot_id).values_list("shard", flat=True).first()
+        if assigned and assigned != str(self.shard):
+            self.shard = Shard.parse(assigned)
+            log(self.bot_id, f"Now scanning shard {assigned}")
+
     def run(self) -> None:
         from services.reader.scanner import scan_source
-        self.register(shard=str(self.shard))
+        self.register(shard="" if self.in_docker else str(self.shard))
         try:
             while not self.should_stop():
+                if self.wait_while_paused():
+                    continue
+                self.follow_assigned_shard()
                 self.set_task(f"Scanning, shard {self.shard}")
                 registered = errors = 0
                 for source in self.sources:

@@ -25,14 +25,13 @@ import time
 from datetime import timedelta
 
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from core import stage_queue
-from core.models import Bot, BotEvent, IntakeFolder
+from core import housekeeping
+from core.models import Bot, BotEvent
 from core.safety import add_yes_option, confirm_environment, require_writable
-from pipeline.config import load_config
-from pipeline.stages import STAGES
+from pipeline.config import load_config, reader_mode
 
 PROJECT_ROOT = str(settings.PROJECT_ROOT)        # where "python -m bots" must run
 MAX_RESTARTS = 5                 # crashes within RESTART_WINDOW before we give up
@@ -47,6 +46,9 @@ class Command(BaseCommand):
         add_yes_option(parser)
 
     def handle(self, *args, **opts):
+        if settings.BOTS_MANAGED_BY == "docker":
+            raise CommandError("Bots are managed by Docker here (ANPR_BOTS_MANAGED_BY=docker): "
+                               "run the housekeeper instead (python manage.py housekeeper).")
         require_writable("start the bot supervisor")
         confirm_environment("start the bot supervisor", assume_yes=opts.get("yes", False), stdout=self.stdout)
         cfg = load_config()
@@ -73,12 +75,10 @@ class Command(BaseCommand):
                 self.reconcile()
                 if time.monotonic() - last_stuck_check >= 30:
                     last_stuck_check = time.monotonic()
-                    for name in STAGES:
-                        c = stage_queue.settings_of(name)
-                        back = stage_queue.return_stuck(name, c["stuck_after_minutes"], c["max_attempts"])
-                        if back:
-                            self.stdout.write(f"[{name}] returned {back} stuck item(s) to the line")
-                    routed = self.route_forgotten_folders()
+                    for name, back in housekeeping.return_stuck_items().items():
+                        self.stdout.write(f"[{name}] returned {back} stuck item(s) to the line")
+                    housekeeping.skip_switched_off()
+                    routed = housekeeping.route_forgotten_folders()
                     if routed:
                         self.stdout.write(f"Routed {routed} folder(s) whose images were all finished")
                 time.sleep(opts["interval"])
@@ -100,9 +100,11 @@ class Command(BaseCommand):
 
         # Reader bots split the folders on disk: with 3 of them they get 1/3, 2/3 and 3/3.
         # When you add or remove one, the numbers change, and running readers restart with theirs.
+        # Kafka mode: no shards at all, Kafka shares the topic's partitions between the readers.
         readers = sorted((b for b in bots.values() if b.stage == Bot.Stage.READER
                           and b.desired_running and not b.delete_requested), key=lambda b: b.name)
-        self.shards = {b.id: f"{i}/{len(readers)}" for i, b in enumerate(readers, 1)}
+        self.shards = {} if reader_mode() == "kafka" else \
+            {b.id: f"{i}/{len(readers)}" for i, b in enumerate(readers, 1)}
 
         for bot in bots.values():
             proc = self.procs.get(bot.id)
@@ -126,7 +128,7 @@ class Command(BaseCommand):
                 continue
 
             # From here on, the bot SHOULD be running.
-            if alive and bot.stage == Bot.Stage.READER and bot.shard and bot.shard != self.shards.get(bot.id):
+            if alive and bot.id in self.shards and bot.shard and bot.shard != self.shards[bot.id]:
                 if bot.id not in self.restarting:          # finish the current scan, then restart
                     self.restarting.add(bot.id)
                     self.event(bot, f"Reader count changed: restarting as shard {self.shards.get(bot.id)}")
@@ -169,15 +171,6 @@ class Command(BaseCommand):
         Bot.objects.filter(pk=bot.pk).update(state=Bot.State.STARTING, pid=proc.pid, shard=shard,
                                              last_heartbeat=timezone.now())
         self.stdout.write(f"Started {bot.stage} bot {bot.name}{' as shard ' + shard if shard else ''} (pid {proc.pid})")
-
-    def route_forgotten_folders(self, limit: int = 500) -> int:
-        """Normally the OCR bot that reads a folder's last image routes it. A folder can be
-        missed when its last image FAILED somewhere else (in preprocessing, or returned as stuck):
-        this sweep routes those, so no folder waits in 'reading' forever."""
-        from core.ocr_results import finish_folder
-        ids = list(IntakeFolder.objects.filter(stage="reading").values_list("id", flat=True)[:limit])
-        cfg = stage_queue.settings_of("ocr")
-        return sum(finish_folder(f, cfg) for f in stage_queue.folders_ready(ids))
 
     def record_crash(self, bot: Bot, code: int) -> bool:
         """Returns True if we should restart it, False if it crashed too often."""

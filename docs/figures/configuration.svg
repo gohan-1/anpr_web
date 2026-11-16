@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 560" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#1f2933">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#46525c"/></marker>
+  </defs>
+  <rect width="1000" height="560" fill="#ffffff"/>
+  <text x="24" y="34" font-size="20" font-weight="700">Figure 7. Where settings come from (the upper layer wins)</text>
+  <text x="24" y="56" fill="#5b6670">Two separate stacks: WHERE things run (left: environment variables) and HOW the line behaves (right: settings.yaml and the Pipeline page).</text>
+
+  <!-- left stack -->
+  <text x="24" y="92" font-weight="700" font-size="15">Environment: database, secrets, mode</text>
+  <rect x="24" y="106" width="450" height="64" rx="8" fill="#e6f4ea" stroke="#2e7d4f"/>
+  <text x="40" y="130" font-weight="700">1. Real environment variables</text>
+  <text x="40" y="150" font-size="12" fill="#5b6670">set by Docker (env_file), the shell, or the hosting platform</text>
+  <rect x="24" y="180" width="450" height="80" rx="8" fill="#eef4fb" stroke="#3b6ea5"/>
+  <text x="40" y="204" font-weight="700">2. envs/.env.&lt;environment&gt;</text>
+  <text x="40" y="224" font-size="12" fill="#5b6670">.env.local · .env.staging · .env.production · .env.docker (+ .env.ocr)</text>
+  <text x="40" y="242" font-size="12" fill="#5b6670">environment = --env option, else ANPR_ENV, else "local"</text>
+  <rect x="24" y="270" width="450" height="64" rx="8" fill="#fdf3dc" stroke="#b07d00"/>
+  <text x="40" y="294" font-weight="700">3. main/.env (local only)</text>
+  <text x="40" y="314" font-size="12" fill="#5b6670">the original file: ANPR_DB_ENGINE=postgres + POSTGRES_*</text>
+  <rect x="24" y="344" width="450" height="52" rx="8" fill="#f4f5f6" stroke="#9aa5ae"/>
+  <text x="40" y="368" font-weight="700">4. Defaults in code</text>
+  <text x="40" y="386" font-size="12" fill="#5b6670">local: SQLite web/db.sqlite3, DEBUG on, dev secret key</text>
+
+  <rect x="24" y="410" width="450" height="130" rx="8" fill="#ffffff" stroke="#c9d1d9"/>
+  <text x="40" y="430" font-weight="700" font-size="12">Most used variables</text>
+  <g font-size="11.5" fill="#5b6670">
+    <text x="40" y="450">DATABASE_URL · DJANGO_SECRET_KEY · DJANGO_DEBUG</text>
+    <text x="40" y="467">DJANGO_ALLOWED_HOSTS · ANPR_ENV · ANPR_READ_ONLY</text>
+    <text x="40" y="484">ANPR_BOTS_MANAGED_BY (supervisor | docker)</text>
+    <text x="40" y="501">ANPR_READER_MODE (scan | kafka) · KAFKA_BOOTSTRAP_SERVERS</text>
+    <text x="40" y="518">PREFECT_API_URL · BOT_API_USERNAME / BOT_API_PASSWORD</text>
+    <text x="40" y="534">BOT_RATE_LIMIT (Docker OCR bots)</text>
+  </g>
+
+  <!-- right stack -->
+  <text x="526" y="92" font-weight="700" font-size="15">Behaviour of the line</text>
+  <rect x="526" y="106" width="450" height="80" rx="8" fill="#e6f4ea" stroke="#2e7d4f"/>
+  <text x="542" y="130" font-weight="700">1. Pipeline page → Settings tab</text>
+  <text x="542" y="150" font-size="12" fill="#5b6670">saved in StageSettings; bots read it before EVERY batch:</text>
+  <text x="542" y="168" font-size="12" fill="#5b6670">no restart. "reset" = back to the file's value.</text>
+  <rect x="526" y="196" width="450" height="80" rx="8" fill="#eef4fb" stroke="#3b6ea5"/>
+  <text x="542" y="220" font-weight="700">2. config/settings.yaml</text>
+  <text x="542" y="240" font-size="12" fill="#5b6670">everything else: api, reader, kafka, bots, pipeline</text>
+  <text x="542" y="258" font-size="12" fill="#5b6670">read at start: make restart / make docker-restart</text>
+  <rect x="526" y="286" width="450" height="66" rx="8" fill="#f4f5f6" stroke="#9aa5ae"/>
+  <text x="542" y="310" font-weight="700">Overrides from the environment</text>
+  <text x="542" y="328" font-size="12" fill="#5b6670">ANPR_CONFIG (another settings file) · ANPR_API_KEY</text><text x="542" y="344" font-size="12" fill="#5b6670">ANPR_READER_MODE · ANPR_USE_PREFECT</text>
+
+  <rect x="526" y="366" width="450" height="174" rx="8" fill="#ffffff" stroke="#c9d1d9"/>
+  <text x="542" y="388" font-weight="700" font-size="12">Bots page (per bot, applies on the next batch)</text>
+  <g font-size="11.5" fill="#5b6670">
+    <text x="542" y="410">API username + password (stored encrypted) · rate limit (calls/s)</text>
+    <text x="542" y="428">start / stop · remove · which stage</text>
+  </g>
+  <text x="542" y="460" font-weight="700" font-size="12">Number of bots per stage</text>
+  <g font-size="11.5" fill="#5b6670">
+    <text x="542" y="482">development: Pipeline page + / − (the supervisor follows)</text>
+    <text x="542" y="500">Docker: make docker-scale STAGE=ocr N=3</text>
+    <text x="542" y="518">(ANPR_BOTS_MANAGED_BY decides which one applies)</text>
+  </g>
+</svg>

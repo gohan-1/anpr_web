@@ -9,6 +9,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = BASE_DIR.parent
 sys.path.insert(0, str(PROJECT_ROOT))  # lets Django import the pipeline package
 
+# Unit tests never send flow runs to a running Prefect server (pipeline.use_prefect).
+# They also run in scan mode whatever envs/.env.local says (the Kafka tests choose Kafka themselves).
+if sys.argv[1:2] == ["test"]:
+    os.environ.setdefault("ANPR_USE_PREFECT", "0")
+    os.environ.setdefault("ANPR_READER_MODE", "scan")
+
 # ---- Environment (local / staging / production): see anpr_web/env.py --------------
 # Settings come from envs/.env.<environment> (e.g. envs/.env.staging). For local, the
 # older main/.env is read as well, so an existing setup keeps working unchanged.
@@ -51,6 +57,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',            # Django REST Framework: builds the API
     'rest_framework.authtoken',  # login tokens for the React app
+    'drf_spectacular',           # OpenAPI schema + Swagger UI (/api/docs/)
+    'drf_spectacular_sidecar',   # Swagger UI / ReDoc files, served by Django itself (no CDN)
     'core',
 ]
 
@@ -207,4 +215,41 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",   # builds the OpenAPI schema
+}
+
+# ---- Who adds and removes bots --------------------------------------------------------
+#   supervisor (default): the web app adds bots (Add bot, + / −) and `bot_supervisor` runs them.
+#   docker: every bot is ONE container; you add bots by scaling containers
+#           (docker compose up -d --scale bot-ocr=3). The web app can't add or remove them,
+#           Stop/Start become Pause/Resume, and the `housekeeper` container does the chores.
+BOTS_MANAGED_BY = os.environ.get("ANPR_BOTS_MANAGED_BY", "supervisor").strip().lower()
+if BOTS_MANAGED_BY not in ("supervisor", "docker"):
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured("ANPR_BOTS_MANAGED_BY must be 'supervisor' or 'docker'")
+
+# ---- API documentation (Swagger UI at /api/docs/, ReDoc at /api/redoc/) -------------------
+# On by default locally; on a server only when ANPR_API_DOCS=true (it lists every endpoint).
+API_DOCS = env_bool("ANPR_API_DOCS", default=DEBUG)
+SPECTACULAR_SETTINGS = {
+    "TITLE": "ANPR API",
+    "DESCRIPTION": (
+        "The API behind the ANPR web app: login, folder results and review, bots, and the assembly line.\n\n"
+        "**How to call it:** `POST /api/auth/login/` with your username and password, then send "
+        "`Authorization: Token <token>` with every request. In Swagger: press **Authorize** and enter "
+        "`Token <token>` (with the word Token)."),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,           # don't list /api/schema/ itself
+    "COMPONENT_SPLIT_REQUEST": True,         # separate request/response shapes (e.g. password is write-only)
+    "SWAGGER_UI_DIST": "SIDECAR",
+    "SWAGGER_UI_FAVICON_HREF": "SIDECAR",
+    "REDOC_DIST": "SIDECAR",
+    "SWAGGER_UI_SETTINGS": {"persistAuthorization": True, "displayRequestDuration": True, "filter": True},
+    "TAGS": [
+        {"name": "Auth", "description": "Log in and out. The token goes in `Authorization: Token <token>`."},
+        {"name": "Dashboard", "description": "Environment and the numbers on the Overview page."},
+        {"name": "Folders", "description": "Folder results (Folders page), review actions, image files."},
+        {"name": "Bots", "description": "Every bot of every stage (Bots page): create, start, stop, edit, remove."},
+        {"name": "Pipeline", "description": "The assembly line (Pipeline page): lines, + / −, settings, failures."},
+    ],
 }

@@ -316,3 +316,55 @@ class EnvironmentTests(APITestCase):
             call_command("seed_demo")
         with self.assertRaisesMessage(CommandError, "only works on local"):
             call_command("flush", interactive=False)
+
+
+# ---------------------------------------------------------------- Django admin
+class AdminPagesTests(TestCase):
+    """Every admin list and edit page opens: catches a wrong field name in admin.py."""
+
+    def test_every_admin_page_opens(self):
+        from django.contrib import admin as django_admin
+        from django.urls import reverse
+        from django.utils import timezone
+        from .models import BotEvent, IntakeFolder, IntakeImage, StageMinute, StageSettings
+
+        boss = get_user_model().objects.create_superuser("boss", password="pass12345")
+        self.client.force_login(boss)
+        bot = make_bot()
+        BotEvent.objects.create(bot=bot, message="hi")
+        f = IntakeFolder.objects.create(path="/d/a", name="a", source="t", accuracy="high", priority=1)
+        IntakeImage.objects.create(folder=f, file_name="x.jpg", path="/d/a/x.jpg", size_bytes=1, sha256="s",
+                                   modified_at=timezone.now())
+        StageMinute.objects.create(stage="ocr", minute=timezone.now())
+        StageSettings.objects.create(stage="ocr", values={"batch_size": 5})
+        result = Folder.objects.create(path="/d/a", name="a")
+        Image.objects.create(folder=result, path="/d/a/x.jpg", file_name="x.jpg", sha256="s")
+        Job.objects.create(input_path="/d")
+        for model in django_admin.site._registry:
+            if model._meta.app_label != "core":
+                continue
+            info = (model._meta.app_label, model._meta.model_name)
+            self.assertEqual(self.client.get(reverse("admin:%s_%s_changelist" % info)).status_code, 200, model)
+            obj = model.objects.first()
+            self.assertEqual(self.client.get(reverse("admin:%s_%s_change" % info, args=[obj.pk])).status_code, 200, model)
+        page = self.client.get(reverse("admin:core_bot_change", args=[bot.pk])).content.decode()
+        self.assertNotIn(bot.api_password_encrypted, page)            # the encrypted password is never shown
+
+
+class ApiDocsTests(APITestCase):
+    """Swagger (/api/docs/) works and the schema has no warnings: every view is described."""
+
+    def test_schema_is_complete_and_valid(self):
+        from io import StringIO
+        out = StringIO()
+        call_command("spectacular", "--validate", "--fail-on-warn", stdout=out, stderr=StringIO())
+        schema = out.getvalue()
+        for path in ("/api/auth/login/", "/api/bots/{id}/start/", "/api/pipeline/{stage}/scale/",
+                     "/api/pipeline/retry/", "/api/folders/{id}/review/"):
+            self.assertIn(path + ":", schema)
+
+    def test_swagger_and_redoc_pages_open_without_login(self):
+        self.assertEqual(self.client.get("/api/docs/").status_code, 200)
+        self.assertEqual(self.client.get("/api/redoc/").status_code, 200)
+        self.assertEqual(self.client.get("/api/schema/").status_code, 200)
+

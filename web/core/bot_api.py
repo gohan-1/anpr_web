@@ -5,14 +5,19 @@ A ViewSet bundles all the endpoints for one kind of thing. ModelViewSet gives us
 for free:  GET /bots/ (list), POST /bots/ (create), GET/PATCH/DELETE /bots/<id>/.
 @action adds our own extra endpoints, like POST /bots/<id>/start/.
 """
+from datetime import timedelta
+
+from django.conf import settings
+from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
-from pipeline.config import load_config
+from pipeline.config import load_config, reader_mode
 from pipeline.stages import BOT_STAGES, STAGE_LABELS, STAGES
 
+from . import schema as docs
 from . import stage_queue
 from .models import Bot, BotEvent
 from .serializers import BotEventSerializer, BotSerializer
@@ -24,6 +29,22 @@ class BotPages(PageNumberPagination):
     max_page_size = 1000
 
 
+def docker_managed() -> bool:
+    return settings.BOTS_MANAGED_BY == "docker"
+
+
+def docker_refusal(what: str) -> Response:
+    """Docker mode: bots are containers, so the web app can't add or remove them."""
+    return Response({"detail": f"Bots run as Docker containers here: {what} with Docker, e.g. "
+                               "docker compose up -d --scale bot-ocr=3"}, status=status.HTTP_403_FORBIDDEN)
+
+
+def is_alive(bot: Bot) -> bool:
+    stale = load_config()["bots"]["stale_after_seconds"]
+    return bool(bot.last_heartbeat and bot.last_heartbeat >= timezone.now() - timedelta(seconds=stale))
+
+
+@docs.BOTS
 class BotViewSet(viewsets.ModelViewSet):
     queryset = Bot.objects.order_by("name")
     serializer_class = BotSerializer
@@ -34,6 +55,11 @@ class BotViewSet(viewsets.ModelViewSet):
         if stage := self.request.query_params.get("stage"):      # GET /api/bots/?stage=ocr
             qs = qs.filter(stage=stage)
         return qs
+
+    def create(self, request, *args, **kwargs):
+        if docker_managed():
+            return docker_refusal("add bots")
+        return super().create(request, *args, **kwargs)
 
     @action(detail=True, methods=["post"])
     def start(self, request, pk=None):
@@ -57,8 +83,14 @@ class BotViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         """Deleting doesn't remove the row immediately: the bot first finishes its folders,
-        then the supervisor deletes it. A bot that isn't running is removed right away."""
+        then the supervisor deletes it. A bot that isn't running is removed right away.
+        Docker mode: only the row of a bot whose container is gone can be removed here."""
         bot = self.get_object()
+        if docker_managed():
+            if is_alive(bot):
+                return docker_refusal("remove a running bot (scale its service down)")
+            bot.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
         if bot.state in (Bot.State.STOPPED, Bot.State.CRASHED) and not bot.desired_running:
             bot.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
@@ -78,6 +110,7 @@ def _stage_bots(stage: str):
     return Bot.objects.filter(stage=stage).order_by("name")
 
 
+@docs.PIPELINE
 @api_view(["GET"])
 def pipeline_overview(request):
     """Everything the Pipeline page shows: per stage, its line, its settings and its bots."""
@@ -101,6 +134,8 @@ def _overview() -> dict:
             "bots_wanted": len(active),
             "bots_running": sum(b.state == Bot.State.RUNNING for b in bots),
             "settings": settings_now,
+            "can_switch_off": name in stage_queue.CAN_SWITCH_OFF,
+            "enabled": bool(settings_now.get("enabled", True)),
             "editable": {k: {"value": settings_now.get(k), "default": defaults.get(k),
                              "min": lo, "max": hi, "decimal": isinstance(lo, float)}
                          for k, (lo, hi) in stage_queue.EDITABLE_SETTINGS.items() if k in settings_now},
@@ -113,9 +148,14 @@ def _overview() -> dict:
         "folders": stats["folders"],
         "sources": [{k: src.get(k) for k in ("name", "path", "accuracy", "priority")}
                     for src in cfg.get("reader", {}).get("sources", [])],
+        # how reader bots find new folders: "scan" (the sources above) or "kafka" (the folders topic)
+        "reader_mode": reader_mode(),
+        "kafka_topic": cfg.get("kafka", {}).get("topics", {}).get("folders", ""),
         "use_prefect": bool(cfg.get("pipeline", {}).get("use_prefect")),
         "ocr_api_mock": bool(cfg.get("api", {}).get("mock", True)),    # real API: OCR bots need an account
         "max_bots_per_stage": cfg["bots"].get("max_bots_per_stage", 50),
+        # "docker": bots are containers, added/removed only with Docker; the page hides + / − and Add bot
+        "bots_managed_by": settings.BOTS_MANAGED_BY,
     }
 
 
@@ -127,9 +167,11 @@ def _failed_count(stage: str) -> int:
     return Model.objects.filter(stage="failed", failed_in=stage).count()
 
 
+@docs.SETTINGS
 @api_view(["PATCH"])
 def pipeline_settings(request, stage):
     """PATCH {"batch_size": 50, "parallel": null}: change a stage's settings (null = back to default).
+    {"enabled": false} switches preprocessing off (its waiting images go straight to OCR).
     Bots pick the change up before their next batch."""
     if stage not in BOT_STAGES:
         return Response({"detail": f"Unknown stage '{stage}'."}, status=status.HTTP_404_NOT_FOUND)
@@ -142,6 +184,7 @@ def pipeline_settings(request, stage):
     return Response({"stage": stage, "settings": values})
 
 
+@docs.FAILED
 @api_view(["GET"])
 def pipeline_failed(request):
     """GET ?level=image|folder: the newest failed items with their error."""
@@ -151,6 +194,7 @@ def pipeline_failed(request):
     return Response(stage_queue.failed_items(level, limit=200))
 
 
+@docs.RETRY
 @api_view(["POST"])
 def pipeline_retry(request):
     """POST {"level": "image", "ids": [1, 2]}: failed items go back to the line they failed in.
@@ -164,6 +208,7 @@ def pipeline_retry(request):
     return Response(stage_queue.retry(level, ids))
 
 
+@docs.SCALE
 @api_view(["POST"])
 def pipeline_scale(request, stage):
     """POST {"count": 4}: make this stage have exactly 4 bots.
@@ -171,6 +216,8 @@ def pipeline_scale(request, stage):
     each finishing its current batch first."""
     if stage not in BOT_STAGES:
         return Response({"detail": f"Unknown stage '{stage}'."}, status=status.HTTP_404_NOT_FOUND)
+    if docker_managed():
+        return docker_refusal(f"change the number of {stage} bots (scale the bot-{stage} service)")
     try:
         count = int(request.data.get("count"))
     except (TypeError, ValueError):

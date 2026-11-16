@@ -1,5 +1,5 @@
 """
-Reader service tests. They use a throwaway SQLite database and temporary folders,
+Reader tests (the scanning code reader bots use in scan mode: services/reader/scanner.py). They use a throwaway SQLite database and temporary folders,
 so your real data and database are never touched.  Run: pytest -q tests/test_reader.py
 """
 import importlib
@@ -26,22 +26,19 @@ cfg["reader"]["sources"] = [
 cfg["reader"]["min_folder_age_seconds"] = 0
 yaml.safe_dump(cfg, open(TMP / "settings.yaml", "w"))
 os.environ["ANPR_CONFIG"] = str(TMP / "settings.yaml")
-os.environ["READER_SHARD"] = "1/1"
 if "pipeline.config" in sys.modules:                 # make sure the test config is the one loaded
     importlib.reload(sys.modules["pipeline.config"])
 
 import services.common.django_setup  # noqa: E402,F401
 from django.core.management import call_command  # noqa: E402
-from django.test import override_settings  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
 
 from core.models import IntakeFolder, IntakeImage  # noqa: E402
-from services.reader.app import app  # noqa: E402
+from core.models import StageSettings  # noqa: E402
+from core import stage_queue  # noqa: E402
 from services.reader.scanner import Shard, Source, scan_source  # noqa: E402
 
 EXT = {".jpg", ".png"}
 LOW_SRC = Source("low-accuracy", LOW, "low", 1)
-client = TestClient(app)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -52,6 +49,7 @@ def database():
 @pytest.fixture(autouse=True)
 def clean():
     IntakeFolder.objects.all().delete()
+    StageSettings.objects.all().delete()
     for root in (LOW, HIGH):
         if root.exists():
             for p in sorted(root.rglob("*"), reverse=True):
@@ -126,52 +124,21 @@ def test_missing_source_is_reported_not_crashed():
     assert r.registered == 0 and "not found" in r.errors[0]
 
 
-# ---------------------------------------------------------------- the HTTP API
-def test_health():
-    body = client.get("/health").json()
-    assert body["status"] == "ok" and body["shard"] == "1/1"
-    assert [s["name"] for s in body["sources"]] == ["low-accuracy", "high-accuracy"]
-
-
-def test_scan_then_folders_come_out_low_accuracy_first():
+# ---------------------------------------------------------------- the first line
+def test_low_accuracy_folders_come_first_in_the_line():
     make_folder(HIGH, "car_high")              # registered first...
-    client.post("/scan")
+    scan(Source("high-accuracy", HIGH, "high", 2))
     make_folder(LOW, "car_low")                # ...low accuracy arrives later
-    assert client.post("/scan").json()["registered"] == 1
-    names = [f["name"] for f in client.get("/folders").json()]
-    assert names == ["car_low", "car_high"]    # but still comes out first
+    scan()
+    line = stage_queue.take("preprocess", "test-bot", 10)
+    assert [i.folder.name for i in line] == ["car_low", "car_low", "car_high", "car_high"]
 
 
-def test_folder_detail_and_image_file():
-    make_folder(LOW, "car_1", contents=(b"\x89PNG-bytes",))
-    client.post("/scan")
-    folder_id = client.get("/folders").json()[0]["id"]
-    detail = client.get(f"/folders/{folder_id}").json()
-    assert [i["file_name"] for i in detail["images"]] == ["cam_0.jpg"]
-    file = client.get(f"/images/{detail['images'][0]['id']}/file")
-    assert file.status_code == 200 and file.content == b"\x89PNG-bytes"
-
-
-def test_files_outside_the_sources_are_refused():
+def test_with_preprocessing_switched_off_images_go_straight_to_ocr():
     make_folder(LOW, "car_1")
-    client.post("/scan")
-    img = IntakeImage.objects.first()
-    IntakeImage.objects.filter(pk=img.pk).update(path="/etc/passwd")
-    assert client.get(f"/images/{img.pk}/file").status_code == 403
-
-
-def test_read_only_refuses_to_scan():
-    with override_settings(READ_ONLY=True):
-        r = client.post("/scan")
-    assert r.status_code == 403 and "Read-only" in r.json()["detail"]
-
-
-def test_stats():
-    make_folder(LOW, "a")
-    make_folder(HIGH, "b")
-    client.post("/scan")
-    s = client.get("/stats").json()
-    assert (s["total_folders"], s["by_accuracy"]) == (2, {"low": 1, "high": 1})
+    stage_queue.set_enabled("preprocess", False)
+    scan()
+    assert set(IntakeImage.objects.values_list("stage", flat=True)) == {"cleaned"}
 
 
 def test_registered_images_enter_the_first_line():

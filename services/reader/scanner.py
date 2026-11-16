@@ -128,8 +128,13 @@ def read_folder(path: str, extensions: set[str]) -> FolderInfo:
 
 
 # ---------------------------------------------------------------- registering
-def register(info: FolderInfo, source: Source, instance: str) -> bool:
-    """Saves the folder and its images together. Returns False if it was already registered."""
+def register(info: FolderInfo, source: Source, instance: str, first_stage: str | None = None) -> bool:
+    """Saves the folder and its images together. Returns False if it was already registered.
+    first_stage: the line the images enter; None = ask stage_queue ("new", or "cleaned" when
+    preprocessing is switched off on the Pipeline page)."""
+    if first_stage is None:
+        from core.stage_queue import first_image_stage
+        first_stage = first_image_stage()
     try:
         with transaction.atomic():               # all or nothing: never a folder without its images
             usable = [i for i in info.images if not i.is_duplicate]
@@ -142,13 +147,13 @@ def register(info: FolderInfo, source: Source, instance: str) -> bool:
                 # a folder with no usable image can't be read: straight to a person
                 stage=IntakeFolder.Stage.READING if usable else IntakeFolder.Stage.MANUAL,
                 route_reason="" if usable else "No usable images in the folder")
-            # Every image enters the first line ("new") with its folder's priority;
-            # duplicates skip the line entirely.
+            # Every image enters the first line with its folder's priority;
+            # duplicates skip the lines entirely.
             IntakeImage.objects.bulk_create([
                 IntakeImage(folder=folder, file_name=i.file_name, path=i.path, size_bytes=i.size_bytes,
                             sha256=i.sha256, is_duplicate=i.is_duplicate, modified_at=i.modified_at,
                             priority=source.priority,
-                            stage=IntakeImage.Stage.SKIPPED if i.is_duplicate else IntakeImage.Stage.NEW)
+                            stage=IntakeImage.Stage.SKIPPED if i.is_duplicate else first_stage)
                 for i in info.images])
         return True
     except IntegrityError:                       # another reader copy registered it a moment earlier
@@ -172,6 +177,8 @@ class ScanResult:
 
 def scan_source(source: Source, shard: Shard, instance: str, *, extensions: set[str],
                 min_age_seconds: int, workers: int, batch_size: int = 1000) -> ScanResult:
+    from core.stage_queue import first_image_stage
+    first_stage = first_image_stage()              # once per scan, not once per folder
     started = time.monotonic()
     result = ScanResult(source=source.name)
     if not source.path.is_dir():
@@ -203,7 +210,7 @@ def scan_source(source: Source, shard: Shard, instance: str, *, extensions: set[
                 if info.error:
                     result.errors.append(f"{info.name}: {info.error}")
                     continue
-                if register(info, source, instance):
+                if register(info, source, instance, first_stage):
                     result.registered += 1
                     result.images += len(info.images)
                     result.bytes += sum(i.size_bytes for i in info.images)

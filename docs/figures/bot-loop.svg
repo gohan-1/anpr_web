@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 640" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#1f2933">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#46525c"/></marker>
+  </defs>
+  <rect width="1000" height="640" fill="#ffffff"/>
+  <text x="24" y="34" font-size="20" font-weight="700">Figure 3. What one stage bot does, forever (bots/runner.py, StageBot.run)</text>
+  <text x="24" y="56" fill="#5b6670">The same loop for preprocess, ocr, llm and trip. Only the handler (bots/handlers.py) differs. Settings and the API account are re-read every round.</text>
+
+  <!-- start -->
+  <rect x="40" y="80" width="250" height="62" rx="31" fill="#e6f4ea" stroke="#2e7d4f"/>
+  <text x="165" y="105" text-anchor="middle" font-weight="700">start</text>
+  <text x="165" y="124" text-anchor="middle" font-size="11" fill="#5b6670">register Bot row · heartbeat thread · reclaim</text>
+  <line x1="165" y1="142" x2="165" y2="168" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <!-- decisions column -->
+  <g font-size="12">
+    <rect x="40" y="170" width="250" height="44" rx="6" fill="#ffffff" stroke="#46525c"/>
+    <text x="165" y="197" text-anchor="middle">told to stop? (Stop / Remove / signal)</text>
+    <rect x="40" y="240" width="250" height="44" rx="6" fill="#ffffff" stroke="#46525c"/>
+    <text x="165" y="267" text-anchor="middle">paused? (Docker: Pause in the web app)</text>
+    <rect x="40" y="310" width="250" height="44" rx="6" fill="#ffffff" stroke="#46525c"/>
+    <text x="165" y="331" text-anchor="middle">re-read stage settings + API account</text>
+    <text x="165" y="346" text-anchor="middle" font-size="11" fill="#5b6670">OCR with a real API and no account: wait</text>
+    <rect x="40" y="380" width="250" height="44" rx="6" fill="#ffffff" stroke="#46525c"/>
+    <text x="165" y="401" text-anchor="middle">next line too long? (backpressure)</text>
+    <text x="165" y="416" text-anchor="middle" font-size="11" fill="#5b6670">pause_if_next_line_over</text>
+    <rect x="40" y="450" width="250" height="44" rx="6" fill="#fdf3dc" stroke="#b07d00"/>
+    <text x="165" y="471" text-anchor="middle" font-weight="600">take a batch from MY line</text>
+    <text x="165" y="486" text-anchor="middle" font-size="11" fill="#5b6670">stage_queue.take(): batch_size, SKIP LOCKED</text>
+  </g>
+  <g stroke="#46525c" stroke-width="1.6" fill="none">
+    <line x1="165" y1="214" x2="165" y2="238" marker-end="url(#a)"/>
+    <line x1="165" y1="284" x2="165" y2="308" marker-end="url(#a)"/>
+    <line x1="165" y1="354" x2="165" y2="378" marker-end="url(#a)"/>
+    <line x1="165" y1="424" x2="165" y2="448" marker-end="url(#a)"/>
+  </g>
+  <g font-size="11" fill="#5b6670"><text x="172" y="231">no</text><text x="172" y="301">no</text><text x="172" y="441">no</text></g>
+
+  <!-- stop exit -->
+  <path d="M40,192 L20,192 L20,600 L38,600" fill="none" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <rect x="40" y="580" width="250" height="40" rx="20" fill="#fbe4e1" stroke="#a8352b"/>
+  <text x="165" y="605" text-anchor="middle" font-size="12">exit: finish the batch first, state "stopped"</text>
+  <text x="26" y="186" font-size="11" fill="#5b6670">yes</text>
+
+  <!-- wait loops back -->
+  <path d="M290,262 L330,262" fill="none" stroke="#46525c" stroke-width="1.6"/>
+  <path d="M290,402 L330,402" fill="none" stroke="#46525c" stroke-width="1.6"/>
+  <path d="M290,472 L330,472" fill="none" stroke="#46525c" stroke-width="1.6"/>
+  <path d="M330,472 L330,160 L170,160" fill="none" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <rect x="340" y="240" width="170" height="44" rx="6" fill="#f4f5f6" stroke="#9aa5ae"/>
+  <text x="425" y="258" text-anchor="middle" font-size="11">yes / too long / line empty:</text>
+  <text x="425" y="273" text-anchor="middle" font-size="11">nap idle_sleep_seconds (2 s)</text>
+
+  <!-- process -->
+  <line x1="290" y1="485" x2="398" y2="485" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <text x="300" y="500" font-size="11" fill="#5b6670">got items</text>
+  <rect x="400" y="440" width="270" height="90" rx="8" fill="#eef4fb" stroke="#3b6ea5"/>
+  <text x="535" y="462" text-anchor="middle" font-weight="700">work on every item in parallel</text>
+  <text x="535" y="480" text-anchor="middle" font-size="11" fill="#5b6670">"parallel" threads, each calls HANDLERS[stage]</text>
+  <text x="535" y="496" text-anchor="middle" font-size="11" fill="#5b6670">one bad item never stops the batch</text>
+  <text x="535" y="514" text-anchor="middle" font-size="11" fill="#5b6670">use_prefect: same work as a Prefect flow run</text>
+
+  <rect x="400" y="316" width="270" height="92" rx="8" fill="#ffffff" stroke="#46525c"/>
+  <text x="535" y="338" text-anchor="middle" font-weight="700">save each outcome</text>
+  <text x="535" y="357" text-anchor="middle" font-size="11" fill="#5b6670">ok → finish(): the item moves to the next line</text>
+  <text x="535" y="373" text-anchor="middle" font-size="11" fill="#5b6670">error → fail(): back to my line, or failed</text>
+  <text x="535" y="389" text-anchor="middle" font-size="11" fill="#5b6670">OCR: route folders whose images are all done</text>
+  <line x1="535" y1="440" x2="535" y2="410" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <path d="M535,316 L535,300 L330,300" fill="none" stroke="#46525c" stroke-width="1.6"/>
+  <text x="430" y="296" font-size="11" fill="#5b6670">count done/failed, next round</text>
+
+  <!-- side panel -->
+  <rect x="710" y="80" width="270" height="540" rx="10" fill="#f8f9fa" stroke="#c9d1d9"/>
+  <text x="726" y="106" font-weight="700">Alongside the loop</text>
+  <g font-size="12">
+    <text x="726" y="134" font-weight="600">Heartbeat thread</text>
+    <text x="726" y="152" font-size="11" fill="#5b6670">writes Bot.last_heartbeat every</text>
+    <text x="726" y="166" font-size="11" fill="#5b6670">heartbeat_seconds (3). Silent for</text>
+    <text x="726" y="180" font-size="11" fill="#5b6670">stale_after_seconds (30) = dead.</text>
+    <text x="726" y="212" font-weight="600">Supervisor / housekeeper</text>
+    <text x="726" y="230" font-size="11" fill="#5b6670">restart a dead bot (development),</text>
+    <text x="726" y="244" font-size="11" fill="#5b6670">return items held longer than</text>
+    <text x="726" y="258" font-size="11" fill="#5b6670">stuck_after_minutes to their line,</text>
+    <text x="726" y="272" font-size="11" fill="#5b6670">route folders nobody routed.</text>
+    <text x="726" y="304" font-weight="600">Reclaim on start</text>
+    <text x="726" y="322" font-size="11" fill="#5b6670">items still held under this bot's</text>
+    <text x="726" y="336" font-size="11" fill="#5b6670">name (it crashed) go straight back.</text>
+    <text x="726" y="368" font-weight="600">Stop vs Pause</text>
+    <text x="726" y="386" font-size="11" fill="#5b6670">development: Stop = finish batch, exit.</text>
+    <text x="726" y="400" font-size="11" fill="#5b6670">Docker: Stop = Pause (stay alive,</text>
+    <text x="726" y="414" font-size="11" fill="#5b6670">take nothing); remove = scale down.</text>
+    <text x="726" y="446" font-weight="600">Prefect down?</text>
+    <text x="726" y="464" font-size="11" fill="#5b6670">the batch runs without Prefect,</text>
+    <text x="726" y="478" font-size="11" fill="#5b6670">a warning is logged once.</text>
+    <text x="726" y="510" font-weight="600">Reader bots</text>
+    <text x="726" y="528" font-size="11" fill="#5b6670">a different loop: scan their shard</text>
+    <text x="726" y="542" font-size="11" fill="#5b6670">of data/ every scan_every_seconds,</text>
+    <text x="726" y="556" font-size="11" fill="#5b6670">or (Kafka mode) poll → register →</text>
+    <text x="726" y="570" font-size="11" fill="#5b6670">commit, one message at a time.</text>
+  </g>
+</svg>

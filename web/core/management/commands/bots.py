@@ -22,7 +22,7 @@ class Command(BaseCommand):
         if not bots:
             self.stdout.write("No bots yet. Add them on the Bots page (or + on the Pipeline page).")
         else:
-            self.stdout.write(f"{'BOT':<16}{'STAGE':<12}{'WANTED':<8}{'STATE':<10}{'ALIVE':<7}{'PID':<9}"
+            self.stdout.write(f"{'BOT':<26}{'STAGE':<12}{'WANTED':<8}{'STATE':<10}{'ALIVE':<7}{'PID':<9}"
                               f"{'DONE':>7}{'FAILED':>8}{'RESTARTS':>10}  ACCOUNT / SHARD")
         alive_count = 0
         for b in bots:
@@ -33,7 +33,7 @@ class Command(BaseCommand):
             extra = f"shard {b.shard}" if b.shard else (b.api_username or ("no account" if b.stage == "ocr" else ""))
             if b.rate_limit:
                 extra += f", {b.rate_limit:g} calls/s"
-            self.stdout.write(f"{b.name:<16}{b.stage:<12}{wanted:<8}{b.state:<10}{('yes' if alive else 'no'):<7}"
+            self.stdout.write(f"{b.name:<26}{b.stage:<12}{wanted:<8}{b.state:<10}{('yes' if alive else 'no'):<7}"
                               f"{str(b.pid or '-'):<9}{b.processed:>7}{b.failed:>8}{b.restarts:>10}  {extra}")
         if bots:
             wanted_on = sum(b.desired_running for b in bots)

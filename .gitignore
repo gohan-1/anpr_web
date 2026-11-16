@@ -16,3 +16,7 @@ sqlite_dump.json
 # make report-files output
 reports/
 backups/
+
+# per-environment settings hold passwords: only the .example files are committed
+envs/.env.*
+!envs/.env.*.example

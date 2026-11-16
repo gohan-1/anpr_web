@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 600" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#1f2933">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#46525c"/></marker>
+  </defs>
+  <rect width="1000" height="600" fill="#ffffff"/>
+  <text x="24" y="34" font-size="20" font-weight="700">Figure 6. The database tables (web/core/models.py)</text>
+  <text x="24" y="56" font-size="13" fill="#5b6670">Left: the assembly line (work in progress). Right: results the web pages show. Bottom: bots and line settings. 1 ─&lt; n = one row has many.</text>
+
+  <!-- IntakeFolder -->
+  <rect x="24" y="80" width="336" height="250" rx="8" fill="#eef4fb" stroke="#3b6ea5"/>
+  <rect x="24" y="80" width="336" height="28" rx="8" fill="#3b6ea5"/>
+  <text x="38" y="99" font-size="14" font-weight="700" fill="#fff">IntakeFolder</text><text x="346" y="99" text-anchor="end" fill="#fff">one vehicle folder</text>
+  <g>
+    <text x="38" y="128"><tspan font-weight="700">path</tspan> (unique) · name · source</text>
+    <text x="38" y="146">accuracy low/high · <tspan font-weight="700">priority</tspan> (lower = first)</text>
+    <text x="38" y="164"><tspan font-weight="700">stage</tspan>: reading · needs_llm · llm_running ·</text>
+    <text x="50" y="180">needs_trip · trip_running · manual · done · failed</text>
+    <text x="38" y="198">taken_by · taken_at · attempts · last_error · failed_in</text>
+    <text x="38" y="216">route_reason · plate · confidence</text>
+    <text x="38" y="234">image_count · duplicate_count · total_bytes</text>
+    <text x="38" y="252">discovered_by · discovered_at · read_at · finished_at</text>
+    <text x="38" y="280" fill="#5b6670">index (stage, priority, id): "next items in a line"</text>
+    <text x="38" y="298" fill="#5b6670">written by: reader (create), llm/trip bots, OCR</text>
+    <text x="38" y="314" fill="#5b6670">bot routing, housekeeping</text>
+  </g>
+
+  <!-- IntakeImage -->
+  <rect x="24" y="360" width="336" height="196" rx="8" fill="#fdf3dc" stroke="#b07d00"/>
+  <rect x="24" y="360" width="336" height="28" rx="8" fill="#b07d00"/>
+  <text x="38" y="379" font-size="14" font-weight="700" fill="#fff">IntakeImage</text><text x="346" y="379" text-anchor="end" fill="#fff">one image file</text>
+  <text x="38" y="408">folder → IntakeFolder · file_name · path · size</text>
+  <text x="38" y="426">sha256 · is_duplicate · priority (from folder)</text>
+  <text x="38" y="444"><tspan font-weight="700">stage</tspan>: new · preprocessing · cleaned ·</text>
+  <text x="50" y="460">ocr_running · read · skipped · failed</text>
+  <text x="38" y="478">taken_by · taken_at · attempts · last_error · failed_in</text>
+  <text x="38" y="496">cleaned_path · plate · confidence · api_response</text>
+  <text x="38" y="514">read_by · duration_ms · api_attempts</text>
+  <text x="38" y="540" fill="#5b6670">written by: reader (create), preprocess, ocr bots</text>
+  <line x1="192" y1="330" x2="192" y2="358" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <text x="200" y="349" fill="#5b6670">1 ─&lt; n</text>
+
+  <!-- results -->
+  <rect x="440" y="80" width="250" height="190" rx="8" fill="#ffffff" stroke="#46525c"/>
+  <rect x="440" y="80" width="250" height="28" rx="8" fill="#46525c"/>
+  <text x="454" y="99" font-size="14" font-weight="700" fill="#fff">Folder</text><text x="680" y="99" text-anchor="end" fill="#fff">result of a folder</text>
+  <text x="454" y="128">path · name · processed_by</text>
+  <text x="454" y="146"><tspan font-weight="700">route</tspan>: processed · accepted · review ·</text>
+  <text x="466" y="162">no_plate · failed · pending</text>
+  <text x="454" y="180">final_plate · final_score · reason · candidates</text>
+  <text x="454" y="198">best_image → Image</text>
+  <text x="454" y="216">reviewed_plate · reviewed_by · reviewed_at</text>
+  <text x="454" y="244" fill="#5b6670">Folders / Review / Overview pages read it</text>
+  <text x="454" y="260" fill="#5b6670">(job → Job: only old pipeline runs)</text>
+
+  <rect x="440" y="300" width="250" height="140" rx="8" fill="#ffffff" stroke="#46525c"/>
+  <rect x="440" y="300" width="250" height="28" rx="8" fill="#46525c"/>
+  <text x="454" y="319" font-size="14" font-weight="700" fill="#fff">Image</text><text x="680" y="319" text-anchor="end" fill="#fff">result of an image</text>
+  <text x="454" y="348">folder → Folder · path · file_name · sha256</text>
+  <text x="454" y="366">plate · confidence · api_response</text>
+  <text x="454" y="384">is_duplicate · is_corrupt · quality</text>
+  <text x="454" y="402">duration_ms · api_attempts · processed_at</text>
+  <text x="454" y="426" fill="#5b6670">served by /api/images/{id}/file/</text>
+  <line x1="565" y1="270" x2="565" y2="298" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <text x="573" y="289" fill="#5b6670">1 ─&lt; n</text>
+
+  <!-- copy arrow -->
+  <path d="M360,140 L438,140" fill="none" stroke="#46525c" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#a)"/>
+  <text x="364" y="128" font-size="11" fill="#5b6670">save_result()</text>
+  <text x="364" y="160" font-size="11" fill="#5b6670">on routing,</text>
+  <text x="364" y="174" font-size="11" fill="#5b6670">by path</text>
+
+  <!-- bots -->
+  <rect x="720" y="80" width="256" height="216" rx="8" fill="#e6f4ea" stroke="#2e7d4f"/>
+  <rect x="720" y="80" width="256" height="28" rx="8" fill="#2e7d4f"/>
+  <text x="734" y="99" font-size="14" font-weight="700" fill="#fff">Bot</text><text x="962" y="99" text-anchor="end" fill="#fff">one bot</text>
+  <text x="734" y="128"><tspan font-weight="700">name</tspan> (unique) · <tspan font-weight="700">stage</tspan> · shard</text>
+  <text x="734" y="146">desired_running (wanted on/off)</text>
+  <text x="734" y="164">delete_requested</text>
+  <text x="734" y="182">state: starting · running · stopping ·</text>
+  <text x="746" y="198">stopped · crashed</text>
+  <text x="734" y="216">pid · host · last_heartbeat · current_task</text>
+  <text x="734" y="234">processed · failed · restarts · last_error</text>
+  <text x="734" y="252">api_username · api_password_encrypted</text>
+  <text x="734" y="270">rate_limit (calls/s, 0 = no limit)</text>
+  <text x="734" y="288" fill="#5b6670">wanted = UI; real = the bot itself</text>
+
+  <rect x="720" y="326" width="256" height="76" rx="8" fill="#ffffff" stroke="#2e7d4f"/>
+  <text x="734" y="348" font-size="14" font-weight="700">BotEvent</text>
+  <text x="734" y="368">bot → Bot · level · message · created_at</text>
+  <text x="734" y="388" fill="#5b6670">a bot's log (Bots page → bot → events)</text>
+  <line x1="848" y1="296" x2="848" y2="324" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <text x="856" y="315" fill="#5b6670">1 ─&lt; n</text>
+
+  <rect x="440" y="470" width="250" height="86" rx="8" fill="#ffffff" stroke="#46525c"/>
+  <text x="454" y="492" font-size="14" font-weight="700">StageSettings</text>
+  <text x="454" y="512">stage (unique) · values (JSON)</text>
+  <text x="454" y="530" fill="#5b6670">Pipeline-page values; beat settings.yaml</text>
+  <text x="454" y="546" fill="#5b6670">also "enabled" for preprocessing</text>
+
+  <rect x="720" y="432" width="256" height="66" rx="8" fill="#ffffff" stroke="#46525c"/>
+  <text x="734" y="454" font-size="14" font-weight="700">StageMinute</text>
+  <text x="734" y="474">stage · minute · done · failed</text>
+  <text x="734" y="490" fill="#5b6670">the "per minute" speed in the UI</text>
+
+  <rect x="720" y="510" width="256" height="66" rx="8" fill="#f4f5f6" stroke="#9aa5ae"/>
+  <text x="734" y="532" font-size="14" font-weight="700">User · Token · Job</text>
+  <text x="734" y="552" fill="#5b6670">logins (Django), API tokens (DRF);</text>
+  <text x="734" y="568" fill="#5b6670">Job: history of the old pipeline only</text>
+
+  <text x="24" y="588" fill="#5b6670">No result row points at a bot: removing a bot never loses results. make reprocess deletes a folder's intake rows and result; it is then read again.</text>
+</svg>

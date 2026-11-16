@@ -24,12 +24,14 @@ from pipeline.config import load_config
 
 from .models import Folder, Image, Job, Route
 from .serializers import (FolderDetailSerializer, FolderListSerializer, JobSerializer,ReviewActionSerializer)
+from . import schema as docs
 from .services import ReviewError, apply_review
 
 ROUTE_KEYS = [Route.PROCESSED, Route.ACCEPTED, Route.REVIEW, Route.NO_PLATE, Route.FAILED]
 
 
 # ---------------------------------------------------------------- login
+@docs.LOGIN
 @api_view(["POST"])
 @permission_classes([AllowAny])            # you can't need a token to get a token
 def login(request):
@@ -41,12 +43,14 @@ def login(request):
     return Response({"token": token.key, "username": user.get_username()})
 
 
+@docs.LOGOUT
 @api_view(["POST"])
 def logout(request):
     request.auth.delete()                  # the token used for this request stops working
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+@docs.ME
 @api_view(["GET"])
 def me(request):
     return Response({"username": request.user.get_username(),
@@ -54,6 +58,7 @@ def me(request):
 
 
 # ---------------------------------------------------------------- dashboard
+@docs.ENVIRONMENT
 @api_view(["GET"])
 @permission_classes([AllowAny])            # the login page shows this too
 def environment(request):
@@ -63,6 +68,7 @@ def environment(request):
                      "database": settings.DATABASE_LABEL})
 
 
+@docs.STATS
 @api_view(["GET"])
 def stats(request):
     """Everything the dashboard charts need, in one request."""
@@ -121,6 +127,7 @@ def _fill_bins(bins: dict) -> list:
 
 
 # ---------------------------------------------------------------- folders
+@docs.FOLDER_LIST
 class FolderList(generics.ListAPIView):
     """GET /api/folders/?q=&route=&scenario=&page=  (a generic view: DRF does the listing and paging)"""
     serializer_class = FolderListSerializer
@@ -139,12 +146,14 @@ class FolderList(generics.ListAPIView):
         return qs
 
 
+@docs.FOLDER_DETAIL
 class FolderDetail(generics.RetrieveAPIView):
     """GET /api/folders/<id>/"""
     queryset = Folder.objects.all()
     serializer_class = FolderDetailSerializer
 
 
+@docs.REVIEW_NEXT
 @api_view(["GET"])
 def review_next(request):
     """The oldest folder waiting for review, or 204 No Content if the queue is empty."""
@@ -156,6 +165,7 @@ def review_next(request):
     return Response(data)
 
 
+@docs.REVIEW
 @api_view(["POST"])
 def review_folder(request, pk):
     """POST /api/folders/<id>/review/  body: {"action": "approve"|"correct"|"reject", "plate": "..."}"""
@@ -171,6 +181,7 @@ def review_folder(request, pk):
 
 
 # ---------------------------------------------------------------- image files
+@docs.IMAGE_FILE
 @api_view(["GET"])
 def image_file(request, pk):
     """Sends the actual image file so React can display it."""

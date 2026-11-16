@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
-# End-to-end test: the real web API, supervisor, stage bots and reader service, driven the
-# way the browser drives them.   Run with:  make test-e2e
+# End-to-end test: the real web API, supervisor and stage bots (and, if Kafka is running,
+# a Kafka-mode reader bot), driven the way the browser drives them.   Run with:  make test-e2e
 #
 # SAFE: uses its own temporary SQLite database, its own copy of 9 vehicle folders, its own
-# settings file and its own ports (8099, 8198). Your PostgreSQL database, main/data and
-# running services are not touched. Mock OCR is forced on.
+# settings file, its own port (8099) and its own Kafka topics (deleted afterwards). Your
+# PostgreSQL database, main/data and running services are not touched. Mock OCR is forced on.
 set -u
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 VENV=${VENV:-$(cd "$ROOT/.." && pwd)/.venv}
 PY=$VENV/bin/python
 SB=$(mktemp -d -t anpr-e2e-XXXXXX)
-WEB=""; SUP=""; RD=""; RO=""
+WEB=""; SUP=""; KR=""; KTOPIC="anpr-e2e-$$"
 
 cleanup() {
-  for p in $RO $RD $SUP $WEB; do kill -TERM "$p" 2>/dev/null; done
+  for p in $KR $SUP $WEB; do kill -TERM "$p" 2>/dev/null; done
   sleep 1
+  [ -n "${KAFKA_OK:-}" ] && "$PY" - "$KTOPIC" <<'KPY' 2>/dev/null
+import sys; from confluent_kafka.admin import AdminClient; import os
+t = sys.argv[1]; a = AdminClient({"bootstrap.servers": os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9094")})
+[f.result(10) for f in a.delete_topics([f"{t}.folders", f"{t}.failed"]).values()]   # wait: the request must really be sent
+KPY
   echo "Sandbox (logs, database): $SB"
 }
 trap cleanup EXIT
@@ -24,20 +29,24 @@ if [ ${#F[@]} -lt 9 ]; then echo "Need at least 9 vehicle folders in $ROOT/data 
 mkdir -p "$SB/src"
 for f in "${F[@]:0:6}"; do cp -a "$f" "$SB/src/"; done
 
-"$PY" - "$ROOT" "$SB" <<'PY'
+"$PY" - "$ROOT" "$SB" "$KTOPIC" <<'PY'
 import sys, yaml
 root, sb = sys.argv[1], sys.argv[2]
 cfg = yaml.safe_load(open(f"{root}/config/settings.yaml"))
 cfg["api"].update(mock=True, mock_latency_seconds=0.05, retry_delay_seconds=0)
-cfg["reader"].update(min_folder_age_seconds=0, instances=["http://127.0.0.1:8198"],
+cfg["reader"].update(mode="scan", min_folder_age_seconds=0, storage_root=f"{sb}/src", wait_for_files_seconds=2,
                      sources=[{"name": "e2e", "path": f"{sb}/src", "accuracy": "high", "priority": 1}])
+t = sys.argv[3]
+cfg["kafka"]["topics"].update(folders=f"{t}.folders", failed=f"{t}.failed")
+cfg["kafka"]["groups"]["reader"] = f"{t}-readers"
+cfg["kafka"]["partitions"] = 2
 cfg["pipeline"]["use_prefect"] = False
 for name, st in cfg["stages"].items():
     st["placeholder_seconds"] = 0.01
 cfg["stages"]["reader"]["scan_every_seconds"] = 2
 yaml.safe_dump(cfg, open(f"{sb}/settings.yaml", "w"))
 PY
-export ANPR_DB_ENGINE=sqlite ANPR_DB_PATH="$SB/e2e.sqlite3" ANPR_CONFIG="$SB/settings.yaml"
+export ANPR_DB_ENGINE=sqlite ANPR_DB_PATH="$SB/e2e.sqlite3" ANPR_CONFIG="$SB/settings.yaml" ANPR_READER_MODE=scan ANPR_USE_PREFECT=0
 
 PASS=0; FAILN=0
 check() { if eval "$2" >/dev/null 2>&1; then echo "  PASS  $1"; PASS=$((PASS+1)); else echo "  FAIL  $1"; FAILN=$((FAILN+1)); fi; }
@@ -61,30 +70,6 @@ check "wrong password rejected" '[ "$(curl -s -o /dev/null -w %{http_code} -X PO
 check "API refuses requests without login" '[ "$(curl -s -o /dev/null -w %{http_code} $URL/bots/)" = 401 ]'
 check "environment endpoint shows the database, never a password" 'curl -s $URL/env/ | grep -q "\"database\":\"SQLite e2e.sqlite3\""'
 
-echo "== reader service"
-(cd "$ROOT" && exec "$PY" -m services.reader --port 8198) >"$SB/reader.log" 2>&1 & RD=$!
-for _ in $(seq 60); do curl -s -o /dev/null http://127.0.0.1:8198/health && break; sleep 0.5; done
-check "/health ok" 'curl -s http://127.0.0.1:8198/health | grep -q "\"status\":\"ok\""'
-check "/scan registers the 6 folders" 'curl -s -X POST http://127.0.0.1:8198/scan | grep -q "\"registered\":6"'
-check "second /scan registers nothing (no duplicates)" 'curl -s -X POST http://127.0.0.1:8198/scan | grep -q "\"registered\":0"'
-check "/folders lists them" '[ "$(curl -s "http://127.0.0.1:8198/folders?limit=50" | json "len(d)")" = 6 ]'
-FID=$(curl -s http://127.0.0.1:8198/folders | json 'd[0]["id"]')
-IMG=$(curl -s http://127.0.0.1:8198/folders/$FID | json 'd["images"][0]["id"]')
-check "/images/{id}/file sends the image" '[ "$(curl -s -o /dev/null -w %{http_code} http://127.0.0.1:8198/images/$IMG/file)" = 200 ]'
-check "/stats counts them" 'curl -s http://127.0.0.1:8198/stats | grep -q "\"total_folders\":6"'
-if curl -s -o /dev/null http://127.0.0.1:4200/api/health; then
-  cp -a "${F[6]}" "$SB/src/"
-  check "Prefect flow scan-sources asks the reader to scan" '(cd "$ROOT" && "$PY" -m pipeline.intake_flow) 2>&1 | grep -q "Scan finished: 1 new folders"'
-else
-  echo "  skip  Prefect flow scan-sources (Prefect server not running; make start prefect)"
-  cp -a "${F[6]}" "$SB/src/"
-fi
-kill $RD; wait $RD 2>/dev/null; RD=""
-(cd "$ROOT" && ANPR_READ_ONLY=1 exec "$PY" -m services.reader --port 8198) >/dev/null 2>&1 & RO=$!
-for _ in $(seq 60); do curl -s -o /dev/null http://127.0.0.1:8198/health && break; sleep 0.5; done
-check "read-only mode blocks /scan" '[ "$(curl -s -o /dev/null -w %{http_code} -X POST http://127.0.0.1:8198/scan)" = 403 ]'
-kill $RO; wait $RO 2>/dev/null; RO=""
-
 echo "== Bots page: create bots"
 mk() { curl -s "${H[@]}" -X POST -d "$1" $URL/bots/; }
 R1=$(mk '{"name":"ocr-acct","stage":"ocr","api_username":"u1","password":"secret-1","rate_limit":0}')
@@ -100,7 +85,7 @@ check "overview lists the 5 stages in order" '[ "$(curl -s "${H[@]}" $URL/pipeli
 echo "== supervisor + stage bots: the whole line"
 (cd "$ROOT/web" && exec "$PY" manage.py bot_supervisor) >"$SB/supervisor.log" 2>&1 & SUP=$!
 sleep 4
-check "nothing processed while bots are off" '[ "$(q "$M;print(IntakeImage.objects.filter(stage=\"new\").count()>0 and not IntakeImage.objects.filter(stage=\"read\").exists())")" = True ]'
+check "nothing happens while every bot is off" '[ "$(q "$M;print(IntakeFolder.objects.count())")" = 0 ]'
 scale() { curl -s "${H[@]}" -X POST -d "{\"count\":$2}" $URL/pipeline/$1/scale/; }
 check "+ answers with the updated overview" '[ "$(scale preprocess 2 | json "[x[\"bots_wanted\"] for x in d[\"stages\"] if x[\"stage\"]==\"preprocess\"][0]")" = 2 ]'
 curl -s "${H[@]}" -X POST $URL/bots/$OID/start/ >/dev/null
@@ -140,6 +125,13 @@ REDO=$(basename "${F[0]}")
 (cd "$ROOT/web" && "$PY" manage.py reset_results --folder "$REDO" --yes) >/dev/null 2>&1
 check "reprocess: the folder is registered and processed again" 'waitq "$M;print(IntakeFolder.objects.filter(name=\"$REDO\",stage__in=(\"done\",\"manual\")).exists() and Folder.objects.filter(name=\"$REDO\").count()==1)" True 60'
 
+echo "== preprocessing switched off"
+check "switch preprocessing off from the API" '[ "$(curl -s "${H[@]}" -X PATCH -d "{\"enabled\":false}" $URL/pipeline/preprocess/settings/ | json "d[\"settings\"][\"enabled\"]")" = False ]'
+cp -a "${F[8]}" "$SB/src/no_preprocess"
+check "a new folder skips preprocessing and is still processed" 'waitq "$M;print(IntakeFolder.objects.filter(name=\"no_preprocess\",stage__in=(\"done\",\"manual\")).exists())" True 60'
+check "its images never went through a preprocess bot" '[ "$(q "$M;print(IntakeImage.objects.filter(folder__name=\"no_preprocess\",cleaned_path=\"\").exclude(stage=\"skipped\").count()==IntakeImage.objects.filter(folder__name=\"no_preprocess\").exclude(stage=\"skipped\").count())")" = True ]'
+curl -s "${H[@]}" -X PATCH -d '{"enabled":true}' $URL/pipeline/preprocess/settings/ >/dev/null
+
 echo "== stop, remove, scale down"
 curl -s "${H[@]}" -X POST $URL/bots/$OID/stop/ >/dev/null
 check "Stop: bot state becomes stopped" 'waitq "$M;print(Bot.objects.get(name=\"ocr-acct\").state)" stopped'
@@ -154,6 +146,35 @@ check "- to 0: the stage's bots stop and are removed" 'waitq "$M;print(Bot.objec
 KIDS=$(pgrep -P $SUP | tr '\n' ' ')               # only THIS sandbox supervisor's bots
 kill -TERM $SUP; wait $SUP 2>/dev/null; SUP=""
 check "SIGTERM to the supervisor stops its bots too" '[ -n "$KIDS" ] && ! ps -p ${KIDS// /,} >/dev/null'
+
+echo "== Kafka mode reader (needs Kafka: make kafka-up; runs alone, after the supervisor)"
+if "$PY" -c "from confluent_kafka.admin import AdminClient; import os; AdminClient({'bootstrap.servers': os.environ.get('KAFKA_BOOTSTRAP_SERVERS','localhost:9094')}).list_topics(timeout=3)" >/dev/null 2>&1; then
+  KAFKA_OK=1
+  KB=$(mk '{"name":"kafka-e2e","stage":"reader"}' | json 'd["id"]')
+  curl -s "${H[@]}" -X POST $URL/bots/$KB/start/ >/dev/null
+  (cd "$ROOT" && ANPR_READER_MODE=kafka exec "$PY" -m bots --stage reader --name kafka-e2e) >"$SB/kafka-reader.log" 2>&1 & KR=$!
+  check "Kafka reader bot starts (no shard: Kafka shares the partitions)" 'waitq "$M;print(Bot.objects.filter(name=\"kafka-e2e\",state=\"running\",shard=\"kafka\").exists())" True 30'
+  mkdir -p "$SB/src/kafka_in" && cp -a "${F[0]}" "$SB/src/kafka_in/kafka_car"
+  "$PY" - "$KTOPIC" <<'KPY'
+import json, os, sys
+from confluent_kafka import Producer
+t = sys.argv[1]
+p = Producer({"bootstrap.servers": os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9094")})
+p.produce(f"{t}.folders", key=b"kafka_car", value=json.dumps({"folder_id": "kafka_car", "folder": "kafka_in/kafka_car", "accuracy": "low"}).encode())
+p.produce(f"{t}.folders", key=b"kafka_car", value=json.dumps({"folder_id": "kafka_car", "folder": "kafka_in/kafka_car", "accuracy": "low"}).encode())
+p.produce(f"{t}.folders", key=b"bad", value=b"not json")
+p.produce(f"{t}.folders", key=b"evil", value=json.dumps({"folder_id": "x", "folder": "../../etc", "accuracy": "low"}).encode())
+p.flush(10)
+KPY
+  check "a folder message is registered: source kafka, low accuracy, images in the first line" 'waitq "$M;print(IntakeFolder.objects.filter(name=\"kafka_car\",source=\"kafka\",accuracy=\"low\",priority=1).exists() and IntakeImage.objects.filter(folder__name=\"kafka_car\",stage=\"new\").exists())" True 40'
+  check "bad messages are refused and counted (sent to the failed topic, not retried)" 'waitq "$M;print(Bot.objects.get(name=\"kafka-e2e\").failed)" 2 30'
+  check "the same message delivered twice registers the folder once" '[ "$(q "$M;print(IntakeFolder.objects.filter(name=\"kafka_car\").count())")" = 1 ]'
+  curl -s "${H[@]}" -X POST $URL/bots/$KB/stop/ >/dev/null
+  check "Stop in the web app: the Kafka reader leaves its group and exits" 'gone "$KR" && waitq "$M;print(Bot.objects.get(name=\"kafka-e2e\").state)" stopped'
+  KR=""
+else
+  echo "  skip  Kafka not reachable at ${KAFKA_BOOTSTRAP_SERVERS:-localhost:9094} (start it: make kafka-up)"
+fi
 
 echo
 echo "RESULT: $PASS passed, $FAILN failed"

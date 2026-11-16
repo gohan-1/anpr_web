@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 620" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#1f2933">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#46525c"/></marker>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a96a0"/></marker>
+  </defs>
+  <rect width="1000" height="620" fill="#ffffff"/>
+  <text x="24" y="34" font-size="20" font-weight="700">Figure 2. The assembly line: stages, lines and routes</text>
+  <text x="24" y="56" fill="#5b6670">Rounded boxes = stages (bots). Square boxes = lines: the value of the "stage" column. A bot takes from the line on its left and puts on its right.</text>
+
+  <rect x="24" y="72" width="16" height="12" fill="#e6f4ea" stroke="#2e7d4f" rx="4"/><text x="46" y="83" font-size="12">stage (bots work here)</text>
+  <rect x="200" y="72" width="16" height="12" fill="#fdf3dc" stroke="#b07d00"/><text x="222" y="83" font-size="12">line of images (IntakeImage.stage)</text>
+  <rect x="450" y="72" width="16" height="12" fill="#eef4fb" stroke="#3b6ea5"/><text x="472" y="83" font-size="12">line of folders (IntakeFolder.stage)</text>
+  <rect x="700" y="72" width="16" height="12" fill="#fbe4e1" stroke="#a8352b"/><text x="722" y="83" font-size="12">end state</text>
+
+  <!-- ================= PER IMAGE ================= -->
+  <text x="24" y="122" font-weight="700" fill="#b07d00">PER IMAGE</text>
+  <rect x="24" y="140" width="110" height="56" rx="10" fill="#e6f4ea" stroke="#2e7d4f"/><text x="79" y="164" text-anchor="middle" font-weight="700">reader</text><text x="79" y="182" text-anchor="middle" font-size="11" fill="#5b6670">registers folder</text>
+  <line x1="134" y1="168" x2="168" y2="168" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <rect x="170" y="148" width="80" height="40" fill="#fdf3dc" stroke="#b07d00"/><text x="210" y="173" text-anchor="middle" font-weight="600">new</text>
+  <line x1="250" y1="168" x2="284" y2="168" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <rect x="286" y="140" width="130" height="56" rx="10" fill="#e6f4ea" stroke="#2e7d4f"/><text x="351" y="164" text-anchor="middle" font-weight="700">preprocess</text><text x="351" y="182" text-anchor="middle" font-size="11" fill="#5b6670">working: preprocessing</text>
+  <line x1="416" y1="168" x2="450" y2="168" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <rect x="452" y="148" width="90" height="40" fill="#fdf3dc" stroke="#b07d00"/><text x="497" y="173" text-anchor="middle" font-weight="600">cleaned</text>
+  <line x1="542" y1="168" x2="576" y2="168" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <rect x="578" y="140" width="130" height="56" rx="10" fill="#e6f4ea" stroke="#2e7d4f"/><text x="643" y="164" text-anchor="middle" font-weight="700">ocr</text><text x="643" y="182" text-anchor="middle" font-size="11" fill="#5b6670">working: ocr_running</text>
+  <line x1="708" y1="168" x2="742" y2="168" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <rect x="744" y="148" width="70" height="40" fill="#fdf3dc" stroke="#b07d00"/><text x="779" y="173" text-anchor="middle" font-weight="600">read</text>
+
+  <path d="M210,148 L210,124 L497,124 L497,146" fill="none" stroke="#8a96a0" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#g)"/>
+  <text x="353" y="118" text-anchor="middle" font-size="11" fill="#5b6670">preprocessing switched off: new images go straight to "cleaned"</text>
+
+  <text x="286" y="216" font-size="11" fill="#5b6670">Any stage: on an error the item goes back to its line; after max_attempts it is <tspan fill="#a8352b" font-weight="700">failed</tspan>.</text>
+  <rect x="170" y="232" width="80" height="32" fill="#fbe4e1" stroke="#a8352b"/><text x="210" y="253" text-anchor="middle" font-size="12">skipped</text>
+  <text x="262" y="253" font-size="11" fill="#5b6670">duplicate images (same SHA-256 in the folder) never enter a line</text>
+
+  <!-- trigger to folder level -->
+  <path d="M779,188 L779,292 L320,292 L320,318" fill="none" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <text x="790" y="226" font-size="12" font-weight="600">when ALL images of the</text>
+  <text x="790" y="242" font-size="12" font-weight="600">folder are finished</text>
+  <text x="790" y="258" font-size="11" fill="#5b6670">(read, skipped or failed)</text>
+  <text x="790" y="273" font-size="11" fill="#5b6670">the OCR bot routes the folder</text>
+
+  <!-- ================= PER FOLDER ================= -->
+  <text x="24" y="318" font-weight="700" fill="#3b6ea5">PER FOLDER</text>
+  <rect x="24" y="345" width="110" height="40" fill="#eef4fb" stroke="#3b6ea5"/><text x="79" y="370" text-anchor="middle" font-weight="600">reading</text>
+  <text x="24" y="404" font-size="11" fill="#5b6670">from registration until</text>
+  <text x="24" y="418" font-size="11" fill="#5b6670">its images are all through</text>
+  <line x1="134" y1="365" x2="168" y2="365" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="170" y="320" width="300" height="92" rx="10" fill="#ffffff" stroke="#46525c"/>
+  <text x="320" y="340" text-anchor="middle" font-weight="700">route by the best OCR confidence</text>
+  <text x="182" y="360" font-size="12">≥ trip_if_confidence_at_least (0.85)</text>
+  <text x="182" y="380" font-size="12">a plate, but less sure</text>
+  <text x="182" y="400" font-size="12">no plate in any image</text>
+  <text x="460" y="360" text-anchor="end" font-size="12" font-weight="700">→ trip</text>
+  <text x="460" y="380" text-anchor="end" font-size="12" font-weight="700">→ llm</text>
+  <text x="460" y="400" text-anchor="end" font-size="12" font-weight="700">→ manual</text>
+
+  <!-- row A: trip -->
+  <path d="M470,356 L490,356 L490,340 L508,340" fill="none" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <rect x="510" y="320" width="110" height="40" fill="#eef4fb" stroke="#3b6ea5"/><text x="565" y="345" text-anchor="middle" font-weight="600">needs_trip</text>
+  <line x1="620" y1="340" x2="654" y2="340" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <rect x="656" y="312" width="120" height="56" rx="10" fill="#e6f4ea" stroke="#2e7d4f"/><text x="716" y="336" text-anchor="middle" font-weight="700">trip</text><text x="716" y="354" text-anchor="middle" font-size="11" fill="#5b6670">trip_running</text>
+  <line x1="776" y1="340" x2="810" y2="340" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <rect x="812" y="320" width="80" height="40" fill="#fbe4e1" stroke="#a8352b"/><text x="852" y="345" text-anchor="middle" font-weight="700">done</text>
+
+  <!-- row B: llm -->
+  <path d="M470,376 L496,376 L496,440 L508,440" fill="none" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <rect x="510" y="420" width="110" height="40" fill="#eef4fb" stroke="#3b6ea5"/><text x="565" y="445" text-anchor="middle" font-weight="600">needs_llm</text>
+  <line x1="620" y1="440" x2="654" y2="440" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <rect x="656" y="412" width="120" height="56" rx="10" fill="#e6f4ea" stroke="#2e7d4f"/><text x="716" y="436" text-anchor="middle" font-weight="700">llm</text><text x="716" y="454" text-anchor="middle" font-size="11" fill="#5b6670">llm_running</text>
+  <path d="M700,412 L700,392 L580,392 L580,362" fill="none" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <text x="708" y="398" font-size="11" fill="#5b6670">decided</text>
+
+  <!-- row C: manual -->
+  <path d="M470,396 L482,396 L482,530 L654,530" fill="none" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <path d="M716,468 L716,508" fill="none" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <text x="724" y="492" font-size="11" fill="#5b6670">not sure</text>
+  <rect x="656" y="510" width="120" height="40" fill="#fbe4e1" stroke="#a8352b"/><text x="716" y="535" text-anchor="middle" font-weight="700">manual</text>
+  <text x="790" y="526" font-size="11" fill="#5b6670">a person decides on the</text>
+  <text x="790" y="540" font-size="11" fill="#5b6670">Folders / Review page</text>
+
+  <text x="24" y="596" font-size="11" fill="#5b6670">Folder stages fail like images: back to the line, then failed after max_attempts (retry from the Pipeline page, Failed tab).</text>
+  <text x="24" y="611" font-size="11" fill="#5b6670">When a folder is routed, its result is also written to the Folder / Image tables that the Folders and Overview pages show.</text>
+</svg>

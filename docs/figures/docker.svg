@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 580" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#1f2933">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#46525c"/></marker>
+  </defs>
+  <rect width="1000" height="580" fill="#ffffff"/>
+  <text x="24" y="34" font-size="20" font-weight="700">Figure 5. The Docker setup (docker-compose.yaml, project "anpr")</text>
+  <text x="24" y="56" fill="#5b6670">One container per service; every bot is ONE container. Ports are published on 127.0.0.1 only. Grey = runs once or is optional.</text>
+
+  <rect x="24" y="76" width="952" height="420" rx="14" fill="#fbfbfc" stroke="#9aa5ae" stroke-dasharray="8 5"/>
+  <text x="40" y="98" font-size="12" fill="#5b6670">docker network "anpr_default": containers reach each other by service name (postgres, kafka, django-api, prefect)</text>
+
+  <!-- row 1 -->
+  <rect x="44" y="114" width="170" height="70" rx="10" fill="#eef4fb" stroke="#3b6ea5"/>
+  <text x="129" y="138" text-anchor="middle" font-weight="700">frontend</text><text x="129" y="156" text-anchor="middle" font-size="11" fill="#5b6670">nginx + built React app</text><text x="129" y="172" text-anchor="middle" font-size="11" font-weight="600">:8080</text>
+  <rect x="244" y="114" width="170" height="70" rx="10" fill="#eef4fb" stroke="#3b6ea5"/>
+  <text x="329" y="138" text-anchor="middle" font-weight="700">django-api</text><text x="329" y="156" text-anchor="middle" font-size="11" fill="#5b6670">API, admin, Swagger</text><text x="329" y="172" text-anchor="middle" font-size="11" font-weight="600">:8000</text>
+  <line x1="214" y1="149" x2="242" y2="149" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <rect x="444" y="114" width="170" height="70" rx="10" fill="#f4f5f6" stroke="#9aa5ae"/>
+  <text x="529" y="138" text-anchor="middle" font-weight="700">migrate</text><text x="529" y="156" text-anchor="middle" font-size="11" fill="#5b6670">creates/updates tables,</text><text x="529" y="172" text-anchor="middle" font-size="11" fill="#5b6670">then exits; others wait for it</text>
+  <rect x="644" y="114" width="170" height="70" rx="10" fill="#e6f4ea" stroke="#2e7d4f"/>
+  <text x="729" y="138" text-anchor="middle" font-weight="700">housekeeper</text><text x="729" y="156" text-anchor="middle" font-size="11" fill="#5b6670">every 30 s: stuck items,</text><text x="729" y="172" text-anchor="middle" font-size="11" fill="#5b6670">shards, gone containers</text>
+  <rect x="834" y="114" width="126" height="70" rx="10" fill="#f4f5f6" stroke="#9aa5ae" stroke-dasharray="5 4"/>
+  <text x="897" y="138" text-anchor="middle" font-weight="700">prefect</text><text x="897" y="156" text-anchor="middle" font-size="11" fill="#5b6670">PREFECT=1 only</text><text x="897" y="172" text-anchor="middle" font-size="11" font-weight="600">:4200</text>
+
+  <!-- bots -->
+  <rect x="44" y="214" width="770" height="166" rx="12" fill="#ffffff" stroke="#2e7d4f"/>
+  <text x="60" y="238" font-weight="700">bot services: scale each one on its own</text>
+  <g font-size="12">
+    <rect x="60" y="300" width="136" height="54" rx="8" fill="#e6f4ea" stroke="#2e7d4f"/><text x="128" y="323" text-anchor="middle" font-weight="700">bot-reader</text><text x="128" y="341" text-anchor="middle" font-size="11" fill="#5b6670">×1 · data/ read-only</text>
+    <rect x="210" y="300" width="136" height="54" rx="8" fill="#e6f4ea" stroke="#2e7d4f"/><text x="278" y="323" text-anchor="middle" font-weight="700">bot-preprocess</text><text x="278" y="341" text-anchor="middle" font-size="11" fill="#5b6670">×1</text>
+    <rect x="360" y="300" width="136" height="54" rx="8" fill="#e6f4ea" stroke="#2e7d4f"/><text x="428" y="323" text-anchor="middle" font-weight="700">bot-ocr</text><text x="428" y="341" text-anchor="middle" font-size="11" fill="#5b6670">×3 (example)</text>
+    <rect x="366" y="306" width="136" height="54" rx="8" fill="none" stroke="#2e7d4f" opacity=".5"/>
+    <rect x="372" y="312" width="136" height="54" rx="8" fill="none" stroke="#2e7d4f" opacity=".3"/>
+    <rect x="522" y="300" width="136" height="54" rx="8" fill="#e6f4ea" stroke="#2e7d4f"/><text x="590" y="323" text-anchor="middle" font-weight="700">bot-llm</text><text x="590" y="341" text-anchor="middle" font-size="11" fill="#5b6670">×1</text>
+    <rect x="672" y="300" width="128" height="54" rx="8" fill="#e6f4ea" stroke="#2e7d4f"/><text x="736" y="323" text-anchor="middle" font-weight="700">bot-trip</text><text x="736" y="341" text-anchor="middle" font-size="11" fill="#5b6670">×1</text>
+  </g>
+  <text x="60" y="256" font-size="11" fill="#5b6670">Each container names its bot &lt;stage&gt;-&lt;container id&gt; and registers itself. More: make docker-scale STAGE=ocr N=3. Fewer: the extra containers</text>
+  <text x="60" y="270" font-size="11" fill="#5b6670">get 60 s (stop_grace_period) to finish their batch; the housekeeper gives back what they held and removes their rows.</text>
+
+  <!-- infra -->
+  <rect x="844" y="214" width="116" height="160" rx="10" fill="#fdf3dc" stroke="#b07d00"/>
+  <text x="902" y="240" text-anchor="middle" font-weight="700">postgres</text><text x="902" y="258" text-anchor="middle" font-size="11" fill="#5b6670">PostgreSQL 16</text>
+  <text x="902" y="282" text-anchor="middle" font-size="11" fill="#5b6670">volume pgdata</text><text x="902" y="300" text-anchor="middle" font-size="11" font-weight="600">:5433 → 5432</text>
+  <text x="902" y="330" text-anchor="middle" font-size="11" fill="#5b6670">everyone's</text><text x="902" y="344" text-anchor="middle" font-size="11" fill="#5b6670">database</text>
+  <line x1="814" y1="327" x2="842" y2="327" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="44" y="404" width="160" height="76" rx="10" fill="#e6f4ea" stroke="#2e7d4f"/>
+  <text x="124" y="428" text-anchor="middle" font-weight="700">producer</text>
+  <text x="124" y="446" text-anchor="middle" font-size="11" fill="#5b6670">watches ./data, sends</text>
+  <text x="124" y="462" text-anchor="middle" font-size="11" fill="#5b6670">new folders · volume</text>
+  <text x="124" y="476" text-anchor="middle" font-size="11" fill="#5b6670">producerstate</text>
+  <line x1="204" y1="442" x2="226" y2="442" stroke="#7b3fb0" stroke-width="1.6" marker-end="url(#a)"/>
+  <rect x="228" y="404" width="200" height="76" rx="10" fill="#f3e8fd" stroke="#7b3fb0"/>
+  <text x="328" y="428" text-anchor="middle" font-weight="700">kafka (1 broker)</text>
+  <text x="328" y="446" text-anchor="middle" font-size="11" fill="#5b6670">inside kafka:9092</text>
+  <text x="328" y="462" text-anchor="middle" font-size="11" fill="#5b6670">this machine localhost:9094</text>
+  <text x="328" y="476" text-anchor="middle" font-size="11" fill="#5b6670">volume kafkadata</text>
+  <rect x="444" y="404" width="126" height="76" rx="10" fill="#f3e8fd" stroke="#7b3fb0"/>
+  <text x="507" y="428" text-anchor="middle" font-weight="700">kafka-ui</text>
+  <text x="507" y="446" text-anchor="middle" font-size="11" fill="#5b6670">topics, lag</text>
+  <text x="507" y="464" text-anchor="middle" font-size="11" font-weight="600">:8081</text>
+  <path d="M260,402 L260,380 L128,380 L128,356" fill="none" stroke="#7b3fb0" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#a)"/>
+  <text x="268" y="396" font-size="11" fill="#7b3fb0">Kafka mode: anpr.folders → bot-reader</text>
+
+  <rect x="584" y="404" width="376" height="84" rx="10" fill="#ffffff" stroke="#9aa5ae"/>
+  <text x="600" y="426" font-weight="700" font-size="12">From this machine (bind mounts)</text>
+  <text x="600" y="446" font-size="11" fill="#5b6670">./config → /app/config (read-only): settings.yaml</text>
+  <text x="600" y="462" font-size="11" fill="#5b6670">./data → /app/data (read-only): the vehicle folders</text>
+  <text x="600" y="476" font-size="11" fill="#5b6670">envs/.env.docker (+ envs/.env.ocr for bot-ocr): settings, secrets</text>
+
+  <text x="24" y="524" font-weight="700">Commands</text>
+  <g font-family="Consolas, Menlo, monospace" font-size="12">
+    <text x="24" y="546">make docker-up [PREFECT=1]</text>
+    <text x="250" y="546">make docker-scale STAGE=ocr N=3</text>
+    <text x="520" y="546">make docker-bots</text>
+    <text x="680" y="546">make docker-logs SERVICE=bot-ocr</text>
+    <text x="24" y="566">make docker-down</text>
+    <text x="190" y="566">make docker-rebuild (after code changes)</text>
+    <text x="520" y="566">make docker-restart (after settings.yaml)</text>
+  </g>
+</svg>

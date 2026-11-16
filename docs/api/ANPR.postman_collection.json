@@ -1,0 +1,1942 @@
+{
+  "info": {
+    "_postman_id": "21ad6939-8e4a-53d0-a8a3-9a6d0c566730",
+    "name": "ANPR API",
+    "description": "Every endpoint of the ANPR Django API, with sample bodies and real sample answers (open a request -> Examples).\n\n1. Import this file and ANPR-local.postman_environment.json; pick the environment.\n2. Fill in username and password in the environment.\n3. Run Auth -> Log in: it saves the token for every other request.\n\nInteractive docs: {{baseUrl}}/api/docs/ (Swagger) and {{baseUrl}}/api/redoc/.\nBuilt by scripts/build_postman.py (make postman).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "Authorization",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "Token {{token}}",
+        "type": "string"
+      },
+      {
+        "key": "in",
+        "value": "header",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "description": "Log in first: it saves the token that every other request uses.",
+      "item": [
+        {
+          "name": "Log in (saves the token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login",
+                ""
+              ]
+            },
+            "description": "Gives a token. The collection uses it for every other request (header `Authorization: Token {{token}}`).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/auth/login/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "auth",
+                    "login",
+                    ""
+                  ]
+                },
+                "description": "Gives a token. The collection uses it for every other request (header `Authorization: Token {{token}}`).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"token\": \"c77833ad4bc1655d181ac7d4d7d64d187df735d5\",\n  \"username\": \"operator\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) {",
+                  "  pm.collectionVariables.set(\"token\", pm.response.json().token);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Who am I",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me",
+                ""
+              ]
+            },
+            "description": ""
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/auth/me/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "auth",
+                    "me",
+                    ""
+                  ]
+                },
+                "description": ""
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"username\": \"operator\",\n  \"review_count\": 0\n}"
+            }
+          ]
+        },
+        {
+          "name": "Log out (the token stops working)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout",
+                ""
+              ]
+            },
+            "description": "Run Log in again afterwards."
+          },
+          "response": [
+            {
+              "name": "204 No Content",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/auth/logout/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "auth",
+                    "logout",
+                    ""
+                  ]
+                },
+                "description": "Run Log in again afterwards."
+              },
+              "status": "No Content",
+              "code": 204,
+              "_postman_previewlanguage": "text",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": ""
+                }
+              ],
+              "body": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "description": "The Overview page.",
+      "item": [
+        {
+          "name": "Environment (no login needed)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/env/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "env",
+                ""
+              ]
+            },
+            "description": "Which environment and database the server uses. Never shows a password.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/env/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "env",
+                    ""
+                  ]
+                },
+                "description": "Which environment and database the server uses. Never shows a password.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"env\": \"local\",\n  \"read_only\": false,\n  \"database\": \"SQLite db.sqlite3\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Overview statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/stats/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "stats",
+                ""
+              ]
+            },
+            "description": "Everything the Overview page's charts need."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/stats/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "stats",
+                    ""
+                  ]
+                },
+                "description": "Everything the Overview page's charts need."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"total\": 3,\n  \"routes\": {\n    \"processed\": 3,\n    \"accepted\": 0,\n    \"review\": 0,\n    \"no_plate\": 0,\n    \"failed\": 0\n  },\n  \"scenarios\": [],\n  \"daily\": [\n    {\n      \"day\": \"2026-11-16\",\n      \"processed\": 3,\n      \"accepted\": 0,\n      \"review\": 0,\n      \"no_plate\": 0,\n      \"failed\": 0\n    }\n  ],\n  \"score_bins\": [\n    {\n      \"bin\": \"0.75\",\n      \"processed\": 1,\n      \"accepted\": 0,\n      \"review\": 0,\n      \"no_plate\": 0,\n      \"failed\": 0\n    },\n    {\n      \"bin\": \"0.80\",\n      \"processed\": 0,\n      \"accepted\": 0,\n      \"review\": 0,\n      \"no_plate\": 0,\n      \"failed\": 0\n    },\n    {\n      \"bin\": \"0.85\",\n      \"processed\": 1,\n      \"accepted\": 0,\n      \"review\": 0,\n      \"no_plate\": 0,\n      \"failed\": 0\n    },\n    {\n      \"bin\": \"0.90\",\n      \"processed\": 0,\n      \"accepted\": 0,\n      \"review\": 0,\n      \"no_plate\": 0,\n      \"failed\": 0\n    },\n    {\n      \"bin\": \"0.95\",\n      \"processed\": 1,\n      \"accepted\": 0,\n      \"review\": 0,\n      \"no_plate\": 0,\n      \"failed\": 0\n    }\n  ],\n  \"scatter\": [\n    {\n      \"confidence\": 0.775,\n      \"quality\": null,\n      \"route\": \"processed\"\n    },\n    {\n      \"confidence\": 0.505,\n      \"quality\": null,\n      \"route\": \"processed\"\n    },\n    {\n      \"confidence\": 0.988,\n      \"quality\": null,\n      \"route\": \"processed\"\n    },\n    {\n      \"confidence\": 0.877,\n      \"quality\": null,\n      \"route\": \"processed\"\n    },\n    {\n      \"confidence\": 0.55,\n      \"quality\": null,\n      \"route\": \"processed\"\n    }\n  ],\n  \"thresholds\": {\n    \"accept_score\": 0.85,\n    \"conflict_confidence\": 0.8,\n    \"consensus_boost\": 0.03,\n    \"high_confidence\": 0.9,\n    \"max_consensus_boost\": 0.09,\n    \"min_quality\": 0.4,\n    \"plate_regex\": \"^[A-Z0-9]{4,10}$\",\n    \"review_floor\": 0.6,\n    \"weight_confidence\": 0.7,\n    \"weight_quality\": 0.3\n  },\n  \"reviewed_today\": 0,\n  \"jobs\": []\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Pipeline",
+      "description": "The assembly line (Pipeline page): + / \u2212, settings, failures.",
+      "item": [
+        {
+          "name": "Overview: every stage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/pipeline/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pipeline",
+                ""
+              ]
+            },
+            "description": "Per stage: waiting, working, done per minute, failed, settings and its bots."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/pipeline/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "pipeline",
+                    ""
+                  ]
+                },
+                "description": "Per stage: waiting, working, done per minute, failed, settings and its bots."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"stages\": [\n    {\n      \"stage\": \"reader\",\n      \"label\": \"Reading\",\n      \"level\": \"folder\",\n      \"waiting\": 0,\n      \"working\": 0,\n      \"per_minute\": 0.0,\n      \"failed\": 0,\n      \"bots_wanted\": 0,\n      \"bots_running\": 0,\n      \"settings\": {\n        \"placeholder_seconds\": 0,\n        \"scan_every_seconds\": 30\n      },\n      \"can_switch_off\": false,\n      \"enabled\": true,\n      \"editable\": {\n        \"scan_every_seconds\": {\n          \"value\": 30,\n          \"default\": 30,\n          \"min\": 5,\n          \"max\": 86400,\n          \"decimal\": false\n        }\n      },\n      \"bots\": [\n        {\n          \"id\": 5,\n          \"name\": \"reader-1\",\n          \"stage\": \"reader\",\n          \"shard\": \"1/1\",\n          \"api_username\": \"\",\n          \"has_account\": false,\n          \"rate_limit\": 0.0,\n          \"desired_running\": false,\n          \"delete_requested\": false,\n          \"state\": \"stopped\",\n          \"pid\": null,\n          \"host\": \"\",\n          \"started_at\": null,\n          \"last_heartbeat\": null,\n          \"heartbeat_age\": null,\n          \"healthy\": false,\n          \"current_task\": \"\",\n          \"processed\": 0,\n          \"failed\": 0,\n          \"last_error\": \"\",\n          \"restarts\": 0,\n          \"created_at\": \"2026-11-16T08:25:34.954413Z\"\n        }\n      ]\n    },\n    {\n      \"stage\": \"preprocess\",\n      \"label\": \"Preprocessing\",\n      \"level\": \"image\",\n      \"waiting\": 0,\n      \"working\": 0,\n      \"per_minute\": 10.2,\n      \"failed\": 0,\n      \"bots_wanted\": 1,\n      \"bots_running\": 0,\n      \"settings\": {\n        \"batch_size\": 20,\n        \"max_attempts\": 3,\n        \"parallel\": 8,\n        \"pause_if_next_line_over\": 50000,\n        \"placeholder_seconds\": 0,\n        \"stuck_after_minutes\": 10\n      },\n      \"can_switch_off\": true,\n      \"enabled\": true,\n      \"editable\": {\n        \"batch_size\": {\n          \"value\": 20,\n          \"default\": 20,\n          \"min\": 1,\n          \"max\": 1000,\n          \"decimal\": false\n        },\n        \"parallel\": {\n          \"value\": 8,\n          \"default\": 8,\n          \"min\": 1,\n          \"max\": 64,\n          \"decimal\": false\n        },\n        \"max_attempts\": {\n          \"value\": 3,\n          \"default\": 3,\n          \"min\": 1,\n          \"max\": 20,\n          \"decimal\": false\n        },\n        \"stuck_after_minutes\": {\n          \"value\": 10,\n          \"default\": 10,\n          \"min\": 1,\n          \"max\": 1440,\n          \"decimal\": false\n        },\n        \"pause_if_next_line_over\": {\n          \"value\": 50000,\n          \"default\": 50000,\n          \"min\": 0,\n          \"max\": 10000000,\n          \"decimal\": false\n        }\n      },\n      \"bots\": [\n        {\n          \"id\": 1,\n          \"name\": \"preprocess-1\",\n          \"stage\": \"preprocess\",\n          \"shard\": \"\",\n          \"api_username\": \"\",\n          \"has_account\": false,\n          \"rate_limit\": 0.0,\n          \"desired_running\": true,\n          \"delete_requested\": false,\n          \"state\": \"stopped\",\n          \"pid\": null,\n          \"host\": \"anpr-server\",\n          \"started_at\": \"2026-11-16T08:25:34.881676Z\",\n          \"last_heartbeat\": \"2026-11-16T08:25:34.881677Z\",\n          \"heartbeat_age\": 0,\n          \"healthy\": false,\n          \"current_task\": \"\",\n          \"processed\": 6,\n          \"failed\": 0,\n          \"last_error\": \"\",\n          \"restarts\": 0,\n          \"created_at\": \"2026-11-16T08:25:34.881411Z\"\n        }\n      ]\n    },\n    {\n      \"stage\": \"ocr\",\n      \"label\": \"OCR\",\n      \"level\": \"image\",\n      \"waiting\": 0,\n      \"working\": 0,\n      \"per_minute\": 8.5,\n      \"failed\": 1,\n      \"bots_wanted\": 1,\n      \"bots_running\": 0,\n      \"settings\": {\n        \"batch_size\": 20,\n        \"max_attempts\": 3,\n        \"parallel\": 8,\n        \"placeholder_seconds\": 0,\n        \"stuck_after_minutes\": 10,\n        \"trip_if_confidence_at_least\": 0.85\n      },\n      \"can_switch_off\": false,\n      \"enabled\": true,\n      \"editable\": {\n        \"batch_size\": {\n          \"value\": 20,\n          \"default\": 20,\n          \"min\": 1,\n          \"max\": 1000,\n          \"decimal\": false\n        },\n        \"parallel\": {\n          \"value\": 8,\n          \"default\": 8,\n          \"min\": 1,\n          \"max\": 64,\n          \"decimal\": false\n        },\n        \"max_attempts\": {\n          \"value\": 3,\n          \"default\": 3,\n          \"min\": 1,\n          \"max\": 20,\n          \"decimal\": false\n        },\n        \"stuck_after_minutes\": {\n          \"value\": 10,\n          \"default\": 10,\n          \"min\": 1,\n          \"max\": 1440,\n          \"decimal\": false\n        },\n        \"trip_if_confidence_at_least\": {\n          \"value\": 0.85,\n          \"default\": 0.85,\n          \"min\": 0.0,\n          \"max\": 1.0,\n          \"decimal\": true\n        }\n      },\n      \"bots\": [\n        {\n          \"id\": 2,\n          \"name\": \"ocr-1\",\n          \"stage\": \"ocr\",\n          \"shard\": \"\",\n          \"api_username\": \"\",\n          \"has_account\": false,\n          \"rate_limit\": 0.0,\n          \"desired_running\": true,\n          \"delete_requested\": false,\n          \"state\": \"stopped\",\n          \"pid\": null,\n          \"host\": \"anpr-server\",\n          \"started_at\": \"2026-11-16T08:25:34.895136Z\",\n          \"last_heartbeat\": \"2026-11-16T08:25:34.895137Z\",\n          \"heartbeat_age\": 0,\n          \"healthy\": false,\n          \"current_task\": \"\",\n          \"processed\": 5,\n          \"failed\": 0,\n          \"last_error\": \"\",\n          \"restarts\": 0,\n          \"created_at\": \"2026-11-16T08:25:34.894942Z\"\n        }\n      ]\n    },\n    {\n      \"stage\": \"llm\",\n      \"label\": \"LLM\",\n      \"level\": \"folder\",\n      \"waiting\": 0,\n      \"working\": 0,\n      \"per_minute\": 1.7,\n      \"failed\": 0,\n      \"bots_wanted\": 1,\n      \"bots_running\": 0,\n      \"settings\": {\n        \"batch_size\": 5,\n        \"max_attempts\": 2,\n        \"parallel\": 3,\n        \"placeholder_seconds\": 0,\n        \"stuck_after_minutes\": 15\n      },\n      \"can_switch_off\": false,\n      \"enabled\": true,\n      \"editable\": {\n        \"batch_size\": {\n          \"value\": 5,\n          \"default\": 5,\n          \"min\": 1,\n          \"max\": 1000,\n          \"decimal\": false\n        },\n        \"parallel\": {\n          \"value\": 3,\n          \"default\": 3,\n          \"min\": 1,\n          \"max\": 64,\n          \"decimal\": false\n        },\n        \"max_attempts\": {\n          \"value\": 2,\n          \"default\": 2,\n          \"min\": 1,\n          \"max\": 20,\n          \"decimal\": false\n        },\n        \"stuck_after_minutes\": {\n          \"value\": 15,\n          \"default\": 15,\n          \"min\": 1,\n          \"max\": 1440,\n          \"decimal\": false\n        }\n      },\n      \"bots\": [\n        {\n          \"id\": 3,\n          \"name\": \"llm-1\",\n          \"stage\": \"llm\",\n          \"shard\": \"\",\n          \"api_username\": \"\",\n          \"has_account\": false,\n          \"rate_limit\": 0.0,\n          \"desired_running\": true,\n          \"delete_requested\": false,\n          \"state\": \"stopped\",\n          \"pid\": null,\n          \"host\": \"anpr-server\",\n          \"started_at\": \"2026-11-16T08:25:34.943538Z\",\n          \"last_heartbeat\": \"2026-11-16T08:25:34.943539Z\",\n          \"heartbeat_age\": 0,\n          \"healthy\": false,\n          \"current_task\": \"\",\n          \"processed\": 1,\n          \"failed\": 0,\n          \"last_error\": \"\",\n          \"restarts\": 0,\n          \"created_at\": \"2026-11-16T08:25:34.943330Z\"\n        }\n      ]\n    },\n    {\n      \"stage\": \"trip\",\n      \"label\": \"Trip\",\n      \"level\": \"folder\",\n      \"waiting\": 0,\n      \"working\": 0,\n      \"per_minute\": 5.1,\n      \"failed\": 0,\n      \"bots_wanted\": 1,\n      \"bots_running\": 0,\n      \"settings\": {\n        \"batch_size\": 20,\n        \"max_attempts\": 3,\n        \"parallel\": 4,\n        \"placeholder_seconds\": 0,\n        \"stuck_after_minutes\": 10\n      },\n      \"can_switch_off\": false,\n      \"enabled\": true,\n      \"editable\": {\n        \"batch_size\": {\n          \"value\": 20,\n          \"default\": 20,\n          \"min\": 1,\n          \"max\": 1000,\n          \"decimal\": false\n        },\n        \"parallel\": {\n          \"value\": 4,\n          \"default\": 4,\n          \"min\": 1,\n          \"max\": 64,\n          \"decimal\": false\n        },\n        \"max_attempts\": {\n          \"value\": 3,\n          \"default\": 3,\n          \"min\": 1,\n          \"max\": 20,\n          \"decimal\": false\n        },\n        \"stuck_after_minutes\": {\n          \"value\": 10,\n          \"default\": 10,\n          \"min\": 1,\n          \"max\": 1440,\n          \"decimal\": false\n        }\n      },\n      \"bots\": [\n        {\n          \"id\": 4,\n          \"name\": \"trip-1\",\n          \"stage\": \"trip\",\n          \"shard\": \"\",\n          \"api_username\": \"\",\n          \"has_account\": false,\n          \"rate_limit\": 0.0,\n          \"desired_running\": true,\n          \"delete_requested\": false,\n          \"state\": \"stopped\",\n          \"pid\": null,\n          \"host\": \"anpr-server\",\n          \"started_at\": \"2026-11-16T08:25:34.949799Z\",\n          \"last_heartbeat\": \"2026-11-16T08:25:34.949800Z\",\n          \"heartbeat_age\": 0,\n          \"healthy\": false,\n          \"current_task\": \"\",\n          \"processed\": 3,\n          \"failed\": 0,\n          \"last_error\": \"\",\n          \"restarts\": 0,\n          \"created_at\": \"2026-11-16T08:25:34.949619Z\"\n        }\n      ]\n    }\n  ],\n  \"images\": {\n    \"failed\": 1,\n    \"read\": 5\n  },\n  \"folders\": {\n    \"done\": 3\n  },\n  \"sources\": [\n    {\n      \"name\": \"data\",\n      \"path\": \"/srv/anpr/data\",\n      \"accuracy\": \"high\",\n      \"priority\": 1\n    }\n  ],\n  \"reader_mode\": \"scan\",\n  \"kafka_topic\": \"anpr.folders\",\n  \"use_prefect\": false,\n  \"ocr_api_mock\": true,\n  \"max_bots_per_stage\": 50,\n  \"bots_managed_by\": \"supervisor\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "+ / \u2212: give OCR exactly 2 bots",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/pipeline/ocr/scale/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pipeline",
+                "ocr",
+                "scale",
+                ""
+              ]
+            },
+            "description": "Stages: reader, preprocess, ocr, llm, trip. More bots: new ones are added, switched on. Fewer: the newest are removed after their batch.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"count\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/pipeline/ocr/scale/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "pipeline",
+                    "ocr",
+                    "scale",
+                    ""
+                  ]
+                },
+                "description": "Stages: reader, preprocess, ocr, llm, trip. More bots: new ones are added, switched on. Fewer: the newest are removed after their batch.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"count\": 2\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"stages\": [\n    {\n      \"stage\": \"reader\",\n      \"label\": \"Reading\",\n      \"level\": \"folder\",\n      \"waiting\": 0,\n      \"working\": 0,\n      \"per_minute\": 0.0,\n      \"failed\": 0,\n      \"bots_wanted\": 0,\n      \"bots_running\": 0,\n      \"settings\": {\n        \"placeholder_seconds\": 0,\n        \"scan_every_seconds\": 30\n      },\n      \"can_switch_off\": false,\n      \"enabled\": true,\n      \"editable\": {\n        \"scan_every_seconds\": {\n          \"value\": 30,\n          \"default\": 30,\n          \"min\": 5,\n          \"max\": 86400,\n          \"decimal\": false\n        }\n      },\n      \"bots\": [\n        {\n          \"id\": 5,\n          \"name\": \"reader-1\",\n          \"stage\": \"reader\",\n          \"shard\": \"1/1\",\n          \"api_username\": \"\",\n          \"has_account\": false,\n          \"rate_limit\": 0.0,\n          \"desired_running\": false,\n          \"delete_requested\": false,\n          \"state\": \"stopped\",\n          \"pid\": null,\n          \"host\": \"\",\n          \"started_at\": null,\n          \"last_heartbeat\": null,\n          \"heartbeat_age\": null,\n          \"healthy\": false,\n          \"current_task\": \"\",\n          \"processed\": 0,\n          \"failed\": 0,\n          \"last_error\": \"\",\n          \"restarts\": 0,\n          \"created_at\": \"2026-11-16T08:25:34.954413Z\"\n        }\n      ]\n    },\n    {\n      \"stage\": \"preprocess\",\n      \"label\": \"Preprocessing\",\n      \"level\": \"image\",\n      \"waiting\": 0,\n      \"working\": 0,\n      \"per_minute\": 10.2,\n      \"failed\": 0,\n      \"bots_wanted\": 1,\n      \"bots_running\": 0,\n      \"settings\": {\n        \"batch_size\": 20,\n        \"max_attempts\": 3,\n        \"parallel\": 8,\n        \"pause_if_next_line_over\": 50000,\n        \"placeholder_seconds\": 0,\n        \"stuck_after_minutes\": 10\n      },\n      \"can_switch_off\": true,\n      \"enabled\": true,\n      \"editable\": {\n        \"batch_size\": {\n          \"value\": 20,\n          \"default\": 20,\n          \"min\": 1,\n          \"max\": 1000,\n          \"decimal\": false\n        },\n        \"parallel\": {\n          \"value\": 8,\n          \"default\": 8,\n          \"min\": 1,\n          \"max\": 64,\n          \"decimal\": false\n        },\n        \"max_attempts\": {\n          \"value\": 3,\n          \"default\": 3,\n          \"min\": 1,\n          \"max\": 20,\n          \"decimal\": false\n        },\n        \"stuck_after_minutes\": {\n          \"value\": 10,\n          \"default\": 10,\n          \"min\": 1,\n          \"max\": 1440,\n          \"decimal\": false\n        },\n        \"pause_if_next_line_over\": {\n          \"value\": 50000,\n          \"default\": 50000,\n          \"min\": 0,\n          \"max\": 10000000,\n          \"decimal\": false\n        }\n      },\n      \"bots\": [\n        {\n          \"id\": 1,\n          \"name\": \"preprocess-1\",\n          \"stage\": \"preprocess\",\n          \"shard\": \"\",\n          \"api_username\": \"\",\n          \"has_account\": false,\n          \"rate_limit\": 0.0,\n          \"desired_running\": true,\n          \"delete_requested\": false,\n          \"state\": \"stopped\",\n          \"pid\": null,\n          \"host\": \"anpr-server\",\n          \"started_at\": \"2026-11-16T08:25:34.881676Z\",\n          \"last_heartbeat\": \"2026-11-16T08:25:34.881677Z\",\n          \"heartbeat_age\": 1,\n          \"healthy\": false,\n          \"current_task\": \"\",\n          \"processed\": 6,\n          \"failed\": 0,\n          \"last_error\": \"\",\n          \"restarts\": 0,\n          \"created_at\": \"2026-11-16T08:25:34.881411Z\"\n        }\n      ]\n    },\n    {\n      \"stage\": \"ocr\",\n      \"label\": \"OCR\",\n      \"level\": \"image\",\n      \"waiting\": 0,\n      \"working\": 0,\n      \"per_minute\": 8.5,\n      \"failed\": 1,\n      \"bots_wanted\": 2,\n      \"bots_running\": 0,\n      \"settings\": {\n        \"batch_size\": 20,\n        \"max_attempts\": 3,\n        \"parallel\": 8,\n        \"placeholder_seconds\": 0,\n        \"stuck_after_minutes\": 10,\n        \"trip_if_confidence_at_least\": 0.85\n      },\n      \"can_switch_off\": false,\n      \"enabled\": true,\n      \"editable\": {\n        \"batch_size\": {\n          \"value\": 20,\n          \"default\": 20,\n          \"min\": 1,\n          \"max\": 1000,\n          \"decimal\": false\n        },\n        \"parallel\": {\n          \"value\": 8,\n          \"default\": 8,\n          \"min\": 1,\n          \"max\": 64,\n          \"decimal\": false\n        },\n        \"max_attempts\": {\n          \"value\": 3,\n          \"default\": 3,\n          \"min\": 1,\n          \"max\": 20,\n          \"decimal\": false\n        },\n        \"stuck_after_minutes\": {\n          \"value\": 10,\n          \"default\": 10,\n          \"min\": 1,\n          \"max\": 1440,\n          \"decimal\": false\n        },\n        \"trip_if_confidence_at_least\": {\n          \"value\": 0.85,\n          \"default\": 0.85,\n          \"min\": 0.0,\n          \"max\": 1.0,\n          \"decimal\": true\n        }\n      },\n      \"bots\": [\n        {\n          \"id\": 2,\n          \"name\": \"ocr-1\",\n          \"stage\": \"ocr\",\n          \"shard\": \"\",\n          \"api_username\": \"\",\n          \"has_account\": false,\n          \"rate_limit\": 0.0,\n          \"desired_running\": true,\n          \"delete_requested\": false,\n          \"state\": \"stopped\",\n          \"pid\": null,\n          \"host\": \"anpr-server\",\n          \"started_at\": \"2026-11-16T08:25:34.895136Z\",\n          \"last_heartbeat\": \"2026-11-16T08:25:34.895137Z\",\n          \"heartbeat_age\": 0,\n          \"healthy\": false,\n          \"current_task\": \"\",\n          \"processed\": 5,\n          \"failed\": 0,\n          \"last_error\": \"\",\n          \"restarts\": 0,\n          \"created_at\": \"2026-11-16T08:25:34.894942Z\"\n        },\n        {\n          \"id\": 6,\n          \"name\": \"ocr-2\",\n          \"stage\": \"ocr\",\n          \"shard\": \"\",\n          \"api_username\": \"\",\n          \"has_account\": false,\n          \"rate_limit\": 0.0,\n          \"desired_running\": true,\n          \"delete_requested\": false,\n          \"state\": \"stopped\",\n          \"pid\": null,\n          \"host\": \"\",\n          \"started_at\": null,\n          \"last_heartbeat\": null,\n          \"heartbeat_age\": null,\n          \"healthy\": false,\n          \"current_task\": \"\",\n          \"processed\": 0,\n          \"failed\": 0,\n          \"last_error\": \"\",\n          \"restarts\": 0,\n          \"created_at\": \"2026-11-16T08:25:35.379911Z\"\n        }\n      ]\n    },\n    {\n      \"stage\": \"llm\",\n      \"label\": \"LLM\",\n      \"level\": \"folder\",\n      \"waiting\": 0,\n      \"working\": 0,\n      \"per_minute\": 1.7,\n      \"failed\": 0,\n      \"bots_wanted\": 1,\n      \"bots_running\": 0,\n      \"settings\": {\n        \"batch_size\": 5,\n        \"max_attempts\": 2,\n        \"parallel\": 3,\n        \"placeholder_seconds\": 0,\n        \"stuck_after_minutes\": 15\n      },\n      \"can_switch_off\": false,\n      \"enabled\": true,\n      \"editable\": {\n        \"batch_size\": {\n          \"value\": 5,\n          \"default\": 5,\n          \"min\": 1,\n          \"max\": 1000,\n          \"decimal\": false\n        },\n        \"parallel\": {\n          \"value\": 3,\n          \"default\": 3,\n          \"min\": 1,\n          \"max\": 64,\n          \"decimal\": false\n        },\n        \"max_attempts\": {\n          \"value\": 2,\n          \"default\": 2,\n          \"min\": 1,\n          \"max\": 20,\n          \"decimal\": false\n        },\n        \"stuck_after_minutes\": {\n          \"value\": 15,\n          \"default\": 15,\n          \"min\": 1,\n          \"max\": 1440,\n          \"decimal\": false\n        }\n      },\n      \"bots\": [\n        {\n          \"id\": 3,\n          \"name\": \"llm-1\",\n          \"stage\": \"llm\",\n          \"shard\": \"\",\n          \"api_username\": \"\",\n          \"has_account\": false,\n          \"rate_limit\": 0.0,\n          \"desired_running\": true,\n          \"delete_requested\": false,\n          \"state\": \"stopped\",\n          \"pid\": null,\n          \"host\": \"anpr-server\",\n          \"started_at\": \"2026-11-16T08:25:34.943538Z\",\n          \"last_heartbeat\": \"2026-11-16T08:25:34.943539Z\",\n          \"heartbeat_age\": 0,\n          \"healthy\": false,\n          \"current_task\": \"\",\n          \"processed\": 1,\n          \"failed\": 0,\n          \"last_error\": \"\",\n          \"restarts\": 0,\n          \"created_at\": \"2026-11-16T08:25:34.943330Z\"\n        }\n      ]\n    },\n    {\n      \"stage\": \"trip\",\n      \"label\": \"Trip\",\n      \"level\": \"folder\",\n      \"waiting\": 0,\n      \"working\": 0,\n      \"per_minute\": 5.1,\n      \"failed\": 0,\n      \"bots_wanted\": 1,\n      \"bots_running\": 0,\n      \"settings\": {\n        \"batch_size\": 20,\n        \"max_attempts\": 3,\n        \"parallel\": 4,\n        \"placeholder_seconds\": 0,\n        \"stuck_after_minutes\": 10\n      },\n      \"can_switch_off\": false,\n      \"enabled\": true,\n      \"editable\": {\n        \"batch_size\": {\n          \"value\": 20,\n          \"default\": 20,\n          \"min\": 1,\n          \"max\": 1000,\n          \"decimal\": false\n        },\n        \"parallel\": {\n          \"value\": 4,\n          \"default\": 4,\n          \"min\": 1,\n          \"max\": 64,\n          \"decimal\": false\n        },\n        \"max_attempts\": {\n          \"value\": 3,\n          \"default\": 3,\n          \"min\": 1,\n          \"max\": 20,\n          \"decimal\": false\n        },\n        \"stuck_after_minutes\": {\n          \"value\": 10,\n          \"default\": 10,\n          \"min\": 1,\n          \"max\": 1440,\n          \"decimal\": false\n        }\n      },\n      \"bots\": [\n        {\n          \"id\": 4,\n          \"name\": \"trip-1\",\n          \"stage\": \"trip\",\n          \"shard\": \"\",\n          \"api_username\": \"\",\n          \"has_account\": false,\n          \"rate_limit\": 0.0,\n          \"desired_running\": true,\n          \"delete_requested\": false,\n          \"state\": \"stopped\",\n          \"pid\": null,\n          \"host\": \"anpr-server\",\n          \"started_at\": \"2026-11-16T08:25:34.949799Z\",\n          \"last_heartbeat\": \"2026-11-16T08:25:34.949800Z\",\n          \"heartbeat_age\": 0,\n          \"healthy\": false,\n          \"current_task\": \"\",\n          \"processed\": 3,\n          \"failed\": 0,\n          \"last_error\": \"\",\n          \"restarts\": 0,\n          \"created_at\": \"2026-11-16T08:25:34.949619Z\"\n        }\n      ]\n    }\n  ],\n  \"images\": {\n    \"failed\": 1,\n    \"read\": 5\n  },\n  \"folders\": {\n    \"done\": 3\n  },\n  \"sources\": [\n    {\n      \"name\": \"data\",\n      \"path\": \"/srv/anpr/data\",\n      \"accuracy\": \"high\",\n      \"priority\": 1\n    }\n  ],\n  \"reader_mode\": \"scan\",\n  \"kafka_topic\": \"anpr.folders\",\n  \"use_prefect\": false,\n  \"ocr_api_mock\": true,\n  \"max_bots_per_stage\": 50,\n  \"bots_managed_by\": \"supervisor\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Change stage settings",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/pipeline/ocr/settings/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pipeline",
+                "ocr",
+                "settings",
+                ""
+              ]
+            },
+            "description": "Bots use the new values from their next batch. Editable: batch_size, parallel, max_attempts, stuck_after_minutes, pause_if_next_line_over, scan_every_seconds (reader), trip_if_confidence_at_least (ocr).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch_size\": 50,\n  \"parallel\": 16,\n  \"trip_if_confidence_at_least\": 0.9\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/pipeline/ocr/settings/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "pipeline",
+                    "ocr",
+                    "settings",
+                    ""
+                  ]
+                },
+                "description": "Bots use the new values from their next batch. Editable: batch_size, parallel, max_attempts, stuck_after_minutes, pause_if_next_line_over, scan_every_seconds (reader), trip_if_confidence_at_least (ocr).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"batch_size\": 50,\n  \"parallel\": 16,\n  \"trip_if_confidence_at_least\": 0.9\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"stage\": \"ocr\",\n  \"settings\": {\n    \"batch_size\": 50,\n    \"max_attempts\": 3,\n    \"parallel\": 16,\n    \"placeholder_seconds\": 0,\n    \"stuck_after_minutes\": 10,\n    \"trip_if_confidence_at_least\": 0.9\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Switch preprocessing off",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/pipeline/preprocess/settings/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pipeline",
+                "preprocess",
+                "settings",
+                ""
+              ]
+            },
+            "description": "Only preprocessing can be switched off. Its waiting images move straight to the OCR line, and new images skip it until it is switched on again.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/pipeline/preprocess/settings/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "pipeline",
+                    "preprocess",
+                    "settings",
+                    ""
+                  ]
+                },
+                "description": "Only preprocessing can be switched off. Its waiting images move straight to the OCR line, and new images skip it until it is switched on again.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"enabled\": false\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"stage\": \"preprocess\",\n  \"settings\": {\n    \"batch_size\": 20,\n    \"max_attempts\": 3,\n    \"parallel\": 8,\n    \"pause_if_next_line_over\": 50000,\n    \"placeholder_seconds\": 0,\n    \"stuck_after_minutes\": 10,\n    \"enabled\": false\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Switch preprocessing on again",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/pipeline/preprocess/settings/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pipeline",
+                "preprocess",
+                "settings",
+                ""
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/pipeline/preprocess/settings/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "pipeline",
+                    "preprocess",
+                    "settings",
+                    ""
+                  ]
+                },
+                "description": "",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"enabled\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"stage\": \"preprocess\",\n  \"settings\": {\n    \"batch_size\": 20,\n    \"max_attempts\": 3,\n    \"parallel\": 8,\n    \"pause_if_next_line_over\": 50000,\n    \"placeholder_seconds\": 0,\n    \"stuck_after_minutes\": 10,\n    \"enabled\": true\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Reset stage settings to default",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/pipeline/ocr/settings/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pipeline",
+                "ocr",
+                "settings",
+                ""
+              ]
+            },
+            "description": "null = back to the value in config/settings.yaml.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch_size\": null,\n  \"parallel\": null,\n  \"trip_if_confidence_at_least\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/pipeline/ocr/settings/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "pipeline",
+                    "ocr",
+                    "settings",
+                    ""
+                  ]
+                },
+                "description": "null = back to the value in config/settings.yaml.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"batch_size\": null,\n  \"parallel\": null,\n  \"trip_if_confidence_at_least\": null\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"stage\": \"ocr\",\n  \"settings\": {\n    \"batch_size\": 20,\n    \"max_attempts\": 3,\n    \"parallel\": 8,\n    \"placeholder_seconds\": 0,\n    \"stuck_after_minutes\": 10,\n    \"trip_if_confidence_at_least\": 0.85\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Failed images",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/pipeline/failed/?level=image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pipeline",
+                "failed",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "level",
+                  "value": "image"
+                }
+              ]
+            },
+            "description": "level=image or level=folder. The newest 200, with the stage they failed in and the error."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/pipeline/failed/?level=image",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "pipeline",
+                    "failed",
+                    ""
+                  ],
+                  "query": [
+                    {
+                      "key": "level",
+                      "value": "image"
+                    }
+                  ]
+                },
+                "description": "level=image or level=folder. The newest 200, with the stage they failed in and the error."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": 1,\n    \"name\": \"2026111109141337600KCWxGbpnIvMzY.jpg\",\n    \"folder\": \"100117943745175121_1001_173_0_1\",\n    \"failed_in\": \"ocr\",\n    \"error\": \"ConnectError: OCR API unreachable\",\n    \"attempts\": 3\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "Retry all failed images",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/pipeline/retry/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pipeline",
+                "retry",
+                ""
+              ]
+            },
+            "description": "Add \"ids\": [1, 2] to retry only those. Images go back to the line they failed in.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"level\": \"image\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/pipeline/retry/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "pipeline",
+                    "retry",
+                    ""
+                  ]
+                },
+                "description": "Add \"ids\": [1, 2] to retry only those. Images go back to the line they failed in.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"level\": \"image\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"moved\": 0,\n  \"folders_reopened\": 0\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Bots",
+      "description": "Every bot of every stage (Bots page). Run them top to bottom: Create saves {{botId}}.",
+      "item": [
+        {
+          "name": "All bots",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bots/?page_size=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bots",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page_size",
+                  "value": "100"
+                }
+              ]
+            },
+            "description": "Add &stage=ocr (reader, preprocess, ocr, llm, trip) to filter."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/bots/?page_size=100",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "bots",
+                    ""
+                  ],
+                  "query": [
+                    {
+                      "key": "page_size",
+                      "value": "100"
+                    }
+                  ]
+                },
+                "description": "Add &stage=ocr (reader, preprocess, ocr, llm, trip) to filter."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"count\": 6,\n  \"next\": null,\n  \"previous\": null,\n  \"results\": [\n    {\n      \"id\": 3,\n      \"name\": \"llm-1\",\n      \"stage\": \"llm\",\n      \"shard\": \"\",\n      \"api_username\": \"\",\n      \"has_account\": false,\n      \"rate_limit\": 0.0,\n      \"desired_running\": true,\n      \"delete_requested\": false,\n      \"state\": \"stopped\",\n      \"pid\": null,\n      \"host\": \"anpr-server\",\n      \"started_at\": \"2026-11-16T08:25:34.943538Z\",\n      \"last_heartbeat\": \"2026-11-16T08:25:34.943539Z\",\n      \"heartbeat_age\": 1,\n      \"healthy\": false,\n      \"current_task\": \"\",\n      \"processed\": 1,\n      \"failed\": 0,\n      \"last_error\": \"\",\n      \"restarts\": 0,\n      \"created_at\": \"2026-11-16T08:25:34.943330Z\"\n    },\n    {\n      \"id\": 2,\n      \"name\": \"ocr-1\",\n      \"stage\": \"ocr\",\n      \"shard\": \"\",\n      \"api_username\": \"\",\n      \"has_account\": false,\n      \"rate_limit\": 0.0,\n      \"desired_running\": true,\n      \"delete_requested\": false,\n      \"state\": \"stopped\",\n      \"pid\": null,\n      \"host\": \"anpr-server\",\n      \"started_at\": \"2026-11-16T08:25:34.895136Z\",\n      \"last_heartbeat\": \"2026-11-16T08:25:34.895137Z\",\n      \"heartbeat_age\": 1,\n      \"healthy\": false,\n      \"current_task\": \"\",\n      \"processed\": 5,\n      \"failed\": 0,\n      \"last_error\": \"\",\n      \"restarts\": 0,\n      \"created_at\": \"2026-11-16T08:25:34.894942Z\"\n    },\n    {\n      \"id\": 6,\n      \"name\": \"ocr-2\",\n      \"stage\": \"ocr\",\n      \"shard\": \"\",\n      \"api_username\": \"\",\n      \"has_account\": false,\n      \"rate_limit\": 0.0,\n      \"desired_running\": true,\n      \"delete_requested\": false,\n      \"state\": \"stopped\",\n      \"pid\": null,\n      \"host\": \"\",\n      \"started_at\": null,\n      \"last_heartbeat\": null,\n      \"heartbeat_age\": null,\n      \"healthy\": false,\n      \"current_task\": \"\",\n      \"processed\": 0,\n      \"failed\": 0,\n      \"last_error\": \"\",\n      \"restarts\": 0,\n      \"created_at\": \"2026-11-16T08:25:35.379911Z\"\n    },\n    {\n      \"id\": 1,\n      \"name\": \"preprocess-1\",\n      \"stage\": \"preprocess\",\n      \"shard\": \"\",\n      \"api_username\": \"\",\n      \"has_account\": false,\n      \"rate_limit\": 0.0,\n      \"desired_running\": true,\n      \"delete_requested\": false,\n      \"state\": \"stopped\",\n      \"pid\": null,\n      \"host\": \"anpr-server\",\n      \"started_at\": \"2026-11-16T08:25:34.881676Z\",\n      \"last_heartbeat\": \"2026-11-16T08:25:34.881677Z\",\n      \"heartbeat_age\": 1,\n      \"healthy\": false,\n      \"current_task\": \"\",\n      \"processed\": 6,\n      \"failed\": 0,\n      \"last_error\": \"\",\n      \"restarts\": 0,\n      \"created_at\": \"2026-11-16T08:25:34.881411Z\"\n    },\n    {\n      \"id\": 5,\n      \"name\": \"reader-1\",\n      \"stage\": \"reader\",\n      \"shard\": \"1/1\",\n      \"api_username\": \"\",\n      \"has_account\": false,\n      \"rate_limit\": 0.0,\n      \"desired_running\": false,\n      \"delete_requested\": false,\n      \"state\": \"stopped\",\n      \"pid\": null,\n      \"host\": \"\",\n      \"started_at\": null,\n      \"last_heartbeat\": null,\n      \"heartbeat_age\": null,\n      \"healthy\": false,\n      \"current_task\": \"\",\n      \"processed\": 0,\n      \"failed\": 0,\n      \"last_error\": \"\",\n      \"restarts\": 0,\n      \"created_at\": \"2026-11-16T08:25:34.954413Z\"\n    },\n    {\n      \"id\": 4,\n      \"name\": \"trip-1\",\n      \"stage\": \"trip\",\n      \"shard\": \"\",\n      \"api_username\": \"\",\n      \"has_account\": false,\n      \"rate_limit\": 0.0,\n      \"desired_running\": true,\n      \"delete_requested\": false,\n      \"state\": \"stopped\",\n      \"pid\": null,\n      \"host\": \"anpr-server\",\n      \"started_at\": \"2026-11-16T08:25:34.949799Z\",\n      \"last_heartbeat\": \"2026-11-16T08:25:34.949800Z\",\n      \"heartbeat_age\": 1,\n      \"healthy\": false,\n      \"current_task\": \"\",\n      \"processed\": 3,\n      \"failed\": 0,\n      \"last_error\": \"\",\n      \"restarts\": 0,\n      \"created_at\": \"2026-11-16T08:25:34.949619Z\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "OCR bots only",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bots/?stage=ocr",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bots",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "stage",
+                  "value": "ocr"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/bots/?stage=ocr",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "bots",
+                    ""
+                  ],
+                  "query": [
+                    {
+                      "key": "stage",
+                      "value": "ocr"
+                    }
+                  ]
+                },
+                "description": ""
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"count\": 2,\n  \"next\": null,\n  \"previous\": null,\n  \"results\": [\n    {\n      \"id\": 2,\n      \"name\": \"ocr-1\",\n      \"stage\": \"ocr\",\n      \"shard\": \"\",\n      \"api_username\": \"\",\n      \"has_account\": false,\n      \"rate_limit\": 0.0,\n      \"desired_running\": true,\n      \"delete_requested\": false,\n      \"state\": \"stopped\",\n      \"pid\": null,\n      \"host\": \"anpr-server\",\n      \"started_at\": \"2026-11-16T08:25:34.895136Z\",\n      \"last_heartbeat\": \"2026-11-16T08:25:34.895137Z\",\n      \"heartbeat_age\": 1,\n      \"healthy\": false,\n      \"current_task\": \"\",\n      \"processed\": 5,\n      \"failed\": 0,\n      \"last_error\": \"\",\n      \"restarts\": 0,\n      \"created_at\": \"2026-11-16T08:25:34.894942Z\"\n    },\n    {\n      \"id\": 6,\n      \"name\": \"ocr-2\",\n      \"stage\": \"ocr\",\n      \"shard\": \"\",\n      \"api_username\": \"\",\n      \"has_account\": false,\n      \"rate_limit\": 0.0,\n      \"desired_running\": true,\n      \"delete_requested\": false,\n      \"state\": \"stopped\",\n      \"pid\": null,\n      \"host\": \"\",\n      \"started_at\": null,\n      \"last_heartbeat\": null,\n      \"heartbeat_age\": null,\n      \"healthy\": false,\n      \"current_task\": \"\",\n      \"processed\": 0,\n      \"failed\": 0,\n      \"last_error\": \"\",\n      \"restarts\": 0,\n      \"created_at\": \"2026-11-16T08:25:35.379911Z\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create an OCR bot with its API account (saves botId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bots/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bots",
+                ""
+              ]
+            },
+            "description": "Created switched OFF; call Start. The password is stored encrypted and never returned. Other stages need no account: {\"name\": \"trip-2\", \"stage\": \"trip\"}.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"ocr-gate1\",\n  \"stage\": \"ocr\",\n  \"api_username\": \"gate1-account\",\n  \"password\": \"api-password\",\n  \"rate_limit\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/bots/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "bots",
+                    ""
+                  ]
+                },
+                "description": "Created switched OFF; call Start. The password is stored encrypted and never returned. Other stages need no account: {\"name\": \"trip-2\", \"stage\": \"trip\"}.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"ocr-gate1\",\n  \"stage\": \"ocr\",\n  \"api_username\": \"gate1-account\",\n  \"password\": \"api-password\",\n  \"rate_limit\": 2\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 7,\n  \"name\": \"ocr-gate1\",\n  \"stage\": \"ocr\",\n  \"shard\": \"\",\n  \"api_username\": \"gate1-account\",\n  \"has_account\": true,\n  \"rate_limit\": 2.0,\n  \"desired_running\": false,\n  \"delete_requested\": false,\n  \"state\": \"stopped\",\n  \"pid\": null,\n  \"host\": \"\",\n  \"started_at\": null,\n  \"last_heartbeat\": null,\n  \"heartbeat_age\": null,\n  \"healthy\": false,\n  \"current_task\": \"\",\n  \"processed\": 0,\n  \"failed\": 0,\n  \"last_error\": \"\",\n  \"restarts\": 0,\n  \"created_at\": \"2026-11-16T08:25:35.807481Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) {",
+                  "  pm.collectionVariables.set(\"botId\", pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "One bot",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bots/{{botId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bots",
+                "{{botId}}",
+                ""
+              ]
+            },
+            "description": ""
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/bots/{{botId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "bots",
+                    "{{botId}}",
+                    ""
+                  ]
+                },
+                "description": ""
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 7,\n  \"name\": \"ocr-gate1\",\n  \"stage\": \"ocr\",\n  \"shard\": \"\",\n  \"api_username\": \"gate1-account\",\n  \"has_account\": true,\n  \"rate_limit\": 2.0,\n  \"desired_running\": false,\n  \"delete_requested\": false,\n  \"state\": \"stopped\",\n  \"pid\": null,\n  \"host\": \"\",\n  \"started_at\": null,\n  \"last_heartbeat\": null,\n  \"heartbeat_age\": null,\n  \"healthy\": false,\n  \"current_task\": \"\",\n  \"processed\": 0,\n  \"failed\": 0,\n  \"last_error\": \"\",\n  \"restarts\": 0,\n  \"created_at\": \"2026-11-16T08:25:35.807481Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Change rate limit / API account",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bots/{{botId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bots",
+                "{{botId}}",
+                ""
+              ]
+            },
+            "description": "Applies from the bot's next batch. {\"api_username\": \"\"} removes the account. The stage can't change.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rate_limit\": 5,\n  \"password\": \"new-api-password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/bots/{{botId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "bots",
+                    "{{botId}}",
+                    ""
+                  ]
+                },
+                "description": "Applies from the bot's next batch. {\"api_username\": \"\"} removes the account. The stage can't change.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"rate_limit\": 5,\n  \"password\": \"new-api-password\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 7,\n  \"name\": \"ocr-gate1\",\n  \"stage\": \"ocr\",\n  \"shard\": \"\",\n  \"api_username\": \"gate1-account\",\n  \"has_account\": true,\n  \"rate_limit\": 5.0,\n  \"desired_running\": false,\n  \"delete_requested\": false,\n  \"state\": \"stopped\",\n  \"pid\": null,\n  \"host\": \"\",\n  \"started_at\": null,\n  \"last_heartbeat\": null,\n  \"heartbeat_age\": null,\n  \"healthy\": false,\n  \"current_task\": \"\",\n  \"processed\": 0,\n  \"failed\": 0,\n  \"last_error\": \"\",\n  \"restarts\": 0,\n  \"created_at\": \"2026-11-16T08:25:35.807481Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Start",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bots/{{botId}}/start/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bots",
+                "{{botId}}",
+                "start",
+                ""
+              ]
+            },
+            "description": "The supervisor starts its process within ~2 s."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/bots/{{botId}}/start/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "bots",
+                    "{{botId}}",
+                    "start",
+                    ""
+                  ]
+                },
+                "description": "The supervisor starts its process within ~2 s."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 7,\n  \"name\": \"ocr-gate1\",\n  \"stage\": \"ocr\",\n  \"shard\": \"\",\n  \"api_username\": \"gate1-account\",\n  \"has_account\": true,\n  \"rate_limit\": 5.0,\n  \"desired_running\": true,\n  \"delete_requested\": false,\n  \"state\": \"stopped\",\n  \"pid\": null,\n  \"host\": \"\",\n  \"started_at\": null,\n  \"last_heartbeat\": null,\n  \"heartbeat_age\": null,\n  \"healthy\": false,\n  \"current_task\": \"\",\n  \"processed\": 0,\n  \"failed\": 0,\n  \"last_error\": \"\",\n  \"restarts\": 0,\n  \"created_at\": \"2026-11-16T08:25:35.807481Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Stop",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bots/{{botId}}/stop/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bots",
+                "{{botId}}",
+                "stop",
+                ""
+              ]
+            },
+            "description": "It finishes its current batch, then exits."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/bots/{{botId}}/stop/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "bots",
+                    "{{botId}}",
+                    "stop",
+                    ""
+                  ]
+                },
+                "description": "It finishes its current batch, then exits."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 7,\n  \"name\": \"ocr-gate1\",\n  \"stage\": \"ocr\",\n  \"shard\": \"\",\n  \"api_username\": \"gate1-account\",\n  \"has_account\": true,\n  \"rate_limit\": 5.0,\n  \"desired_running\": false,\n  \"delete_requested\": false,\n  \"state\": \"stopped\",\n  \"pid\": null,\n  \"host\": \"\",\n  \"started_at\": null,\n  \"last_heartbeat\": null,\n  \"heartbeat_age\": null,\n  \"healthy\": false,\n  \"current_task\": \"\",\n  \"processed\": 0,\n  \"failed\": 0,\n  \"last_error\": \"\",\n  \"restarts\": 0,\n  \"created_at\": \"2026-11-16T08:25:35.807481Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Events (last 50)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bots/{{botId}}/events/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bots",
+                "{{botId}}",
+                "events",
+                ""
+              ]
+            },
+            "description": ""
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/bots/{{botId}}/events/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "bots",
+                    "{{botId}}",
+                    "events",
+                    ""
+                  ]
+                },
+                "description": ""
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": 11,\n    \"created_at\": \"2026-11-16T08:25:35.990668Z\",\n    \"level\": \"info\",\n    \"message\": \"Stop requested by operator\"\n  },\n  {\n    \"id\": 10,\n    \"created_at\": \"2026-11-16T08:25:35.945621Z\",\n    \"level\": \"info\",\n    \"message\": \"Start requested by operator\"\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "Remove",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bots/{{botId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bots",
+                "{{botId}}",
+                ""
+              ]
+            },
+            "description": "204 = removed now. 202 = it was running: it finishes its batch, then the supervisor removes it. Its results are kept."
+          },
+          "response": [
+            {
+              "name": "204 No Content",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/bots/{{botId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "bots",
+                    "{{botId}}",
+                    ""
+                  ]
+                },
+                "description": "204 = removed now. 202 = it was running: it finishes its batch, then the supervisor removes it. Its results are kept."
+              },
+              "status": "No Content",
+              "code": 204,
+              "_postman_previewlanguage": "text",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": ""
+                }
+              ],
+              "body": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Folders",
+      "description": "Folder results, review, image files. Run 'Folder results' first: it saves {{folderId}}.",
+      "item": [
+        {
+          "name": "Folder results (saves folderId)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/folders/?page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "folders",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Newest first. Filters: ?q=<name or plate>&route=processed,failed&page=2"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/folders/?page=1",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "folders",
+                    ""
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    }
+                  ]
+                },
+                "description": "Newest first. Filters: ?q=<name or plate>&route=processed,failed&page=2"
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"count\": 3,\n  \"next\": null,\n  \"previous\": null,\n  \"results\": [\n    {\n      \"id\": 3,\n      \"name\": \"100117943697101541_1001_173_0_1\",\n      \"route\": \"processed\",\n      \"route_label\": \"Processed\",\n      \"scenario\": \"\",\n      \"plate\": \"MH12AB1000\",\n      \"final_score\": 0.775,\n      \"reviewed_by\": \"\",\n      \"created_at\": \"2026-11-16T08:25:34.939990Z\",\n      \"job\": null\n    },\n    {\n      \"id\": 2,\n      \"name\": \"100117943714537821_1001_173_0_1\",\n      \"route\": \"processed\",\n      \"route_label\": \"Processed\",\n      \"scenario\": \"\",\n      \"plate\": \"MH12AB1002\",\n      \"final_score\": 0.988,\n      \"reviewed_by\": \"\",\n      \"created_at\": \"2026-11-16T08:25:34.937247Z\",\n      \"job\": null\n    },\n    {\n      \"id\": 1,\n      \"name\": \"100117943745175121_1001_173_0_1\",\n      \"route\": \"processed\",\n      \"route_label\": \"Processed\",\n      \"scenario\": \"\",\n      \"plate\": \"MH12AB1001\",\n      \"final_score\": 0.877,\n      \"reviewed_by\": \"\",\n      \"created_at\": \"2026-11-16T08:25:34.935107Z\",\n      \"job\": null\n    }\n  ]\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) {",
+                  "  const r = pm.response.json().results; if (r.length) pm.collectionVariables.set(\"folderId\", r[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search by plate or name",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/folders/?q=MH12",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "folders",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "MH12"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/folders/?q=MH12",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "folders",
+                    ""
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "MH12"
+                    }
+                  ]
+                },
+                "description": ""
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"count\": 3,\n  \"next\": null,\n  \"previous\": null,\n  \"results\": [\n    {\n      \"id\": 3,\n      \"name\": \"100117943697101541_1001_173_0_1\",\n      \"route\": \"processed\",\n      \"route_label\": \"Processed\",\n      \"scenario\": \"\",\n      \"plate\": \"MH12AB1000\",\n      \"final_score\": 0.775,\n      \"reviewed_by\": \"\",\n      \"created_at\": \"2026-11-16T08:25:34.939990Z\",\n      \"job\": null\n    },\n    {\n      \"id\": 2,\n      \"name\": \"100117943714537821_1001_173_0_1\",\n      \"route\": \"processed\",\n      \"route_label\": \"Processed\",\n      \"scenario\": \"\",\n      \"plate\": \"MH12AB1002\",\n      \"final_score\": 0.988,\n      \"reviewed_by\": \"\",\n      \"created_at\": \"2026-11-16T08:25:34.937247Z\",\n      \"job\": null\n    },\n    {\n      \"id\": 1,\n      \"name\": \"100117943745175121_1001_173_0_1\",\n      \"route\": \"processed\",\n      \"route_label\": \"Processed\",\n      \"scenario\": \"\",\n      \"plate\": \"MH12AB1001\",\n      \"final_score\": 0.877,\n      \"reviewed_by\": \"\",\n      \"created_at\": \"2026-11-16T08:25:34.935107Z\",\n      \"job\": null\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "One folder with its images (saves imageId)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/folders/{{folderId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "folders",
+                "{{folderId}}",
+                ""
+              ]
+            },
+            "description": ""
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/folders/{{folderId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "folders",
+                    "{{folderId}}",
+                    ""
+                  ]
+                },
+                "description": ""
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": 3,\n  \"name\": \"100117943697101541_1001_173_0_1\",\n  \"route\": \"processed\",\n  \"route_label\": \"Processed\",\n  \"scenario\": \"\",\n  \"plate\": \"MH12AB1000\",\n  \"final_score\": 0.775,\n  \"reviewed_by\": \"\",\n  \"created_at\": \"2026-11-16T08:25:34.939990Z\",\n  \"job\": null,\n  \"reason\": \"Best read MH12AB1000 has confidence 0.78, below 0.85\",\n  \"final_plate\": \"MH12AB1000\",\n  \"reviewed_plate\": \"\",\n  \"reviewed_at\": null,\n  \"best_image\": 5,\n  \"candidates\": {},\n  \"images\": [\n    {\n      \"id\": 5,\n      \"file_name\": \"202611110754063350082H0rOBgQlIkB.jpg\",\n      \"is_duplicate\": false,\n      \"is_corrupt\": false,\n      \"quality\": null,\n      \"plate\": \"MH12AB1000\",\n      \"confidence\": 0.775,\n      \"final_score\": 0.775,\n      \"api_error\": \"\"\n    },\n    {\n      \"id\": 6,\n      \"file_name\": \"2026111107540633500KexGHWM7EW9qR.jpg\",\n      \"is_duplicate\": false,\n      \"is_corrupt\": false,\n      \"quality\": null,\n      \"plate\": \"MH12AB1003\",\n      \"confidence\": 0.55,\n      \"final_score\": 0.55,\n      \"api_error\": \"\"\n    }\n  ],\n  \"min_quality\": 0.4\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code < 300) {",
+                  "  const i = pm.response.json().images; if (i.length) pm.collectionVariables.set(\"imageId\", i[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Image file",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/images/{{imageId}}/file/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "images",
+                "{{imageId}}",
+                "file",
+                ""
+              ]
+            },
+            "description": "The image itself (binary). In Postman it shows under Body -> Preview."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/images/{{imageId}}/file/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "images",
+                    "{{imageId}}",
+                    "file",
+                    ""
+                  ]
+                },
+                "description": "The image itself (binary). In Postman it shows under Body -> Preview."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "text",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "image/jpeg"
+                }
+              ],
+              "body": "<image/jpeg file, 1207937 bytes>"
+            }
+          ]
+        },
+        {
+          "name": "Next folder waiting for review",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/review/next/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "review",
+                "next",
+                ""
+              ]
+            },
+            "description": "204 No Content when nothing waits for review."
+          },
+          "response": [
+            {
+              "name": "204 No Content",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/review/next/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "review",
+                    "next",
+                    ""
+                  ]
+                },
+                "description": "204 No Content when nothing waits for review."
+              },
+              "status": "No Content",
+              "code": 204,
+              "_postman_previewlanguage": "text",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": ""
+                }
+              ],
+              "body": ""
+            }
+          ]
+        },
+        {
+          "name": "Review: correct the plate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/folders/{{folderId}}/review/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "folders",
+                "{{folderId}}",
+                "review",
+                ""
+              ]
+            },
+            "description": "action: \"approve\", \"correct\" (needs plate) or \"reject\".",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"correct\",\n  \"plate\": \"MH12AB1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/folders/{{folderId}}/review/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "folders",
+                    "{{folderId}}",
+                    "review",
+                    ""
+                  ]
+                },
+                "description": "action: \"approve\", \"correct\" (needs plate) or \"reject\".",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"action\": \"correct\",\n  \"plate\": \"MH12AB1234\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Saved MH12AB1234 for 100117943697101541_1001_173_0_1.\",\n  \"folder\": {\n    \"id\": 3,\n    \"name\": \"100117943697101541_1001_173_0_1\",\n    \"route\": \"accepted\",\n    \"route_label\": \"Accepted\",\n    \"scenario\": \"\",\n    \"plate\": \"MH12AB1234\",\n    \"final_score\": 0.775,\n    \"reviewed_by\": \"operator\",\n    \"created_at\": \"2026-11-16T08:25:34.939990Z\",\n    \"job\": null,\n    \"reason\": \"Best read MH12AB1000 has confidence 0.78, below 0.85\",\n    \"final_plate\": \"MH12AB1000\",\n    \"reviewed_plate\": \"MH12AB1234\",\n    \"reviewed_at\": \"2026-11-16T08:25:36.323182Z\",\n    \"best_image\": 5,\n    \"candidates\": {},\n    \"images\": [\n      {\n        \"id\": 5,\n        \"file_name\": \"202611110754063350082H0rOBgQlIkB.jpg\",\n        \"is_duplicate\": false,\n        \"is_corrupt\": false,\n        \"quality\": null,\n        \"plate\": \"MH12AB1000\",\n        \"confidence\": 0.775,\n        \"final_score\": 0.775,\n        \"api_error\": \"\"\n      },\n      {\n        \"id\": 6,\n        \"file_name\": \"2026111107540633500KexGHWM7EW9qR.jpg\",\n        \"is_duplicate\": false,\n        \"is_corrupt\": false,\n        \"quality\": null,\n        \"plate\": \"MH12AB1003\",\n        \"confidence\": 0.55,\n        \"final_score\": 0.55,\n        \"api_error\": \"\"\n      }\n    ],\n    \"min_quality\": 0.4\n  }\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "botId",
+      "value": ""
+    },
+    {
+      "key": "folderId",
+      "value": ""
+    },
+    {
+      "key": "imageId",
+      "value": ""
+    }
+  ]
+}

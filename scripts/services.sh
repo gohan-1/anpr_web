@@ -20,15 +20,14 @@ mkdir -p "$RUN"
 export PYTHONUNBUFFERED=1                       # write log lines immediately, not in blocks
 export PREFECT_SERVER_ANALYTICS_ENABLED=false   # local server: don't send usage telemetry
 
-ALL=(prefect web reader supervisor scan frontend)        # start order
+ALL=(prefect web supervisor producer frontend)        # start order
 
 describe() {
   case $1 in
     prefect)    echo "Prefect server + dashboard   http://127.0.0.1:4200" ;;
     web)        echo "Django API                   http://127.0.0.1:8000/api/" ;;
-    reader)     echo "Reader service (FastAPI)     http://127.0.0.1:8101/docs" ;;
-    supervisor) echo "Bot supervisor (starts the bots)" ;;
-    scan)       echo "Scheduled reader scan (Prefect flow scan-sources)" ;;
+    supervisor) echo "Bot supervisor (starts the bots, does the housekeeping)" ;;
+    producer)   echo "Kafka producer: new folders in data/ -> anpr.folders" ;;
     frontend)   echo "Web app                      http://127.0.0.1:5173" ;;
   esac
 }
@@ -37,15 +36,14 @@ command_for() {
   case $1 in
     prefect)    echo "cd '$ROOT' && exec '$VENV/bin/prefect' server start --host 127.0.0.1 --port 4200" ;;
     web)        echo "cd '$ROOT/web' && exec '$PY' manage.py runserver 127.0.0.1:8000" ;;
-    reader)     echo "cd '$ROOT' && exec '$PY' -m services.reader --port 8101" ;;
     supervisor) echo "cd '$ROOT/web' && exec '$PY' manage.py bot_supervisor" ;;
-    scan)       echo "cd '$ROOT' && exec '$PY' -m pipeline.intake_flow --serve" ;;
+    producer)   echo "cd '$ROOT' && exec '$PY' scripts/publish_folders.py --watch" ;;
     frontend)   echo "cd '$FRONTEND' && exec npm run dev -- --host 127.0.0.1 --port 5173 --strictPort" ;;
   esac
 }
 
 port_for() {
-  case $1 in prefect) echo 4200 ;; web) echo 8000 ;; reader) echo 8101 ;; frontend) echo 5173 ;; *) echo "" ;; esac
+  case $1 in prefect) echo 4200 ;; web) echo 8000 ;; frontend) echo 5173 ;; *) echo "" ;; esac
 }
 
 # How long a service gets to shut down cleanly. Bots finish their current folders first.
@@ -54,6 +52,9 @@ grace_for() {
 }
 
 pid_of()      { cat "$RUN/$1.pid" 2>/dev/null; }
+# scan or kafka, as the bots see it (envs/.env.local, then config/settings.yaml)
+reader_mode() { (cd "$ROOT/web" && "$PY" -c "from anpr_web.env import load_environment; load_environment()
+import sys; sys.path.insert(0, '..'); from pipeline.config import reader_mode; print(reader_mode())" 2>/dev/null); }
 is_running()  { local p; p=$(pid_of "$1"); [ -n "$p" ] && kill -0 "$p" 2>/dev/null; }
 port_in_use() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 
@@ -151,9 +152,15 @@ for n in "${names[@]}"; do valid "$n" || { echo "Unknown service '$n'. Services:
 
 case $action in
   start)
-    [ ${#names[@]} -eq 0 ] && names=("${ALL[@]}")
+    all=0; [ ${#names[@]} -eq 0 ] && { names=("${ALL[@]}"); all=1; }
     failed=0
-    for n in "${names[@]}"; do start_one "$n" || failed=1; done
+    for n in "${names[@]}"; do
+      # The producer only makes sense when reader bots listen to Kafka (ANPR_READER_MODE=kafka).
+      if [ "$n" = producer ] && [ $all = 1 ] && [ "$(reader_mode)" != kafka ]; then
+        echo "  ·  producer not started: reader mode is scan (start it anyway: make start-producer)"; continue
+      fi
+      start_one "$n" || failed=1
+    done
     echo "Logs: $RUN/<service>.log   (make logs)"
     exit $failed ;;
   stop)

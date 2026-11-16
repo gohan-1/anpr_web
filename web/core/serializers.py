@@ -4,6 +4,7 @@ Serializers turn Django model objects into JSON (and back).
 WHY: React can't read Python objects. A serializer lists which fields to send
 and in what shape. Think of it as the "translator" between the database and React.
 """
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from pipeline.config import load_config
@@ -29,7 +30,7 @@ class FolderListSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "route", "route_label", "scenario", "plate", "final_score",
                   "reviewed_by", "created_at", "job"]
 
-    def get_plate(self, folder):
+    def get_plate(self, folder) -> str:
         # A reviewer's correction wins over what the pipeline decided.
         return folder.reviewed_plate or folder.final_plate
 
@@ -44,9 +45,10 @@ class FolderDetailSerializer(FolderListSerializer):
             "reason", "final_plate", "reviewed_plate", "reviewed_at", "best_image", "candidates",
             "images", "min_quality"]
 
-    def get_min_quality(self, folder):
+    def get_min_quality(self, folder) -> float:
         return load_config()["decision"]["min_quality"]
 
+    @extend_schema_field(ImageSerializer(many=True))
     def get_images(self, folder):
         ordered = folder.images.order_by("is_corrupt", "is_duplicate", "-final_score", "file_name")
         return ImageSerializer(ordered, many=True).data
@@ -129,14 +131,14 @@ class BotSerializer(serializers.ModelSerializer):
             bot.api_password_encrypted = ""
         return super().update(bot, data)
 
-    def get_heartbeat_age(self, bot):
+    def get_heartbeat_age(self, bot) -> int | None:
         return None if bot.last_heartbeat is None else round((timezone.now() - bot.last_heartbeat).total_seconds())
 
-    def get_healthy(self, bot):
+    def get_healthy(self, bot) -> bool:
         age = self.get_heartbeat_age(bot)
         return bot.state == Bot.State.RUNNING and age is not None and age <= load_config()["bots"]["stale_after_seconds"]
 
-    def get_has_account(self, bot):
+    def get_has_account(self, bot) -> bool:
         return bool(bot.api_username and bot.api_password_encrypted)
 
 

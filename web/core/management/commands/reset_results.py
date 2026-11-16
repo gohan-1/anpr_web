@@ -69,7 +69,8 @@ class Command(BaseCommand):
                     m.objects.all().delete()
             Bot.objects.update(processed=0, failed=0, restarts=0, last_error="", current_task="")
         self.stdout.write(self.style.SUCCESS(
-            "Done. Every folder is registered again by the next reader scan and goes down the whole line."))
+            "Done. Every folder is registered again by the next reader scan (Kafka mode: when the producer "
+            "sends it again; make reset tells it to) and goes down the whole line."))
 
     # ---------------------------------------------------------------- some folders
     def reset_folders(self, names: list[str], yes: bool):
@@ -98,4 +99,5 @@ class Command(BaseCommand):
             results.delete()                                   # their Image rows go with them
             folders.delete()                                   # their IntakeImage rows go with them
         self.stdout.write(self.style.SUCCESS(
-            "Done. The next reader scan registers them again and they go down the whole line."))
+            "Done. The next reader scan registers them again (Kafka mode: the producer's next round sends "
+            "them again) and they go down the whole line."))

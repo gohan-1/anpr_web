@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 560" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#1f2933">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#46525c"/></marker>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#a8352b"/></marker>
+  </defs>
+  <rect width="1000" height="560" fill="#ffffff"/>
+  <text x="24" y="34" font-size="20" font-weight="700">Figure 4. Kafka mode: how new folders reach the reader bots</text>
+  <text x="24" y="56" fill="#5b6670">ANPR_READER_MODE=kafka. One message per vehicle folder. The images stay on disk; the message only says where they are.</text>
+
+  <!-- upstream -->
+  <rect x="24" y="110" width="170" height="120" rx="10" fill="#f4f5f6" stroke="#9aa5ae"/>
+  <text x="109" y="136" text-anchor="middle" font-weight="700">Producer</text>
+  <text x="109" y="156" text-anchor="middle" font-size="11" fill="#5b6670">today: the producer</text>
+  <text x="109" y="176" text-anchor="middle" font-size="11" fill="#5b6670">(watches data/); later: cameras</text>
+  <text x="109" y="204" text-anchor="middle" font-size="11" fill="#5b6670">1. images are on disk</text>
+  <text x="109" y="218" text-anchor="middle" font-size="11" fill="#5b6670">2. sends the message</text>
+
+  <!-- message -->
+  <rect x="24" y="260" width="300" height="150" rx="8" fill="#fbfbfc" stroke="#c9d1d9"/>
+  <text x="38" y="282" font-weight="700" font-size="12">the message (JSON), key = folder_id</text>
+  <g font-family="Consolas, Menlo, monospace" font-size="11.5">
+    <text x="38" y="304">{"folder_id": "car_001",</text>
+    <text x="38" y="321"> "folder": "low_accuracy/car_001",</text>
+    <text x="38" y="338"> "accuracy": "low",</text>
+    <text x="38" y="355"> "images": ["cam_1.jpg", …],  <tspan fill="#5b6670">optional</tspan></text>
+    <text x="38" y="372"> "captured_at": "…"}           <tspan fill="#5b6670">optional</tspan></text>
+  </g>
+  <text x="38" y="398" font-size="11" fill="#5b6670">"folder" is relative to reader.storage_root (./data)</text>
+
+  <!-- topic -->
+  <rect x="240" y="96" width="240" height="150" rx="10" fill="#f3e8fd" stroke="#7b3fb0"/>
+  <text x="360" y="120" text-anchor="middle" font-weight="700">topic anpr.folders</text>
+  <text x="360" y="138" text-anchor="middle" font-size="11" fill="#5b6670">6 partitions (kafka.partitions)</text>
+  <g font-size="11">
+    <rect x="256" y="150" width="66" height="24" fill="#fff" stroke="#7b3fb0"/><text x="289" y="166" text-anchor="middle">p0</text>
+    <rect x="327" y="150" width="66" height="24" fill="#fff" stroke="#7b3fb0"/><text x="360" y="166" text-anchor="middle">p1</text>
+    <rect x="398" y="150" width="66" height="24" fill="#fff" stroke="#7b3fb0"/><text x="431" y="166" text-anchor="middle">p2</text>
+    <rect x="256" y="180" width="66" height="24" fill="#fff" stroke="#7b3fb0"/><text x="289" y="196" text-anchor="middle">p3</text>
+    <rect x="327" y="180" width="66" height="24" fill="#fff" stroke="#7b3fb0"/><text x="360" y="196" text-anchor="middle">p4</text>
+    <rect x="398" y="180" width="66" height="24" fill="#fff" stroke="#7b3fb0"/><text x="431" y="196" text-anchor="middle">p5</text>
+  </g>
+  <text x="360" y="230" text-anchor="middle" font-size="11" fill="#5b6670">same key → same partition</text>
+  <line x1="194" y1="170" x2="238" y2="170" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <!-- group -->
+  <rect x="530" y="80" width="200" height="190" rx="10" fill="#ffffff" stroke="#2e7d4f"/>
+  <text x="630" y="102" text-anchor="middle" font-weight="700">group anpr-readers</text>
+  <rect x="546" y="114" width="168" height="58" rx="8" fill="#e6f4ea" stroke="#2e7d4f"/>
+  <text x="630" y="137" text-anchor="middle" font-weight="600">reader bot 1</text><text x="630" y="156" text-anchor="middle" font-size="11" fill="#5b6670">gets p0 p1 p2</text>
+  <rect x="546" y="184" width="168" height="58" rx="8" fill="#e6f4ea" stroke="#2e7d4f"/>
+  <text x="630" y="207" text-anchor="middle" font-weight="600">reader bot 2</text><text x="630" y="226" text-anchor="middle" font-size="11" fill="#5b6670">gets p3 p4 p5</text>
+  <text x="630" y="262" text-anchor="middle" font-size="11" fill="#5b6670">Kafka splits; no shards</text>
+  <line x1="480" y1="162" x2="544" y2="143" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+  <line x1="480" y1="192" x2="544" y2="213" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <!-- per message steps -->
+  <rect x="370" y="300" width="360" height="170" rx="10" fill="#eef4fb" stroke="#3b6ea5"/>
+  <text x="386" y="322" font-weight="700">for each message (services/reader/kafka_intake.py)</text>
+  <g font-size="12">
+    <text x="386" y="346">1. check it: fields, accuracy low/high, path stays</text>
+    <text x="402" y="362" font-size="11" fill="#5b6670">inside storage_root, image names only</text>
+    <text x="386" y="384">2. wait up to wait_for_files_seconds for the files</text>
+    <text x="386" y="406">3. read images: size, SHA-256, duplicates</text>
+    <text x="386" y="428">4. register folder + images in ONE transaction</text>
+    <text x="386" y="450">5. commit the offset (only now is it "done")</text>
+  </g>
+  <line x1="630" y1="270" x2="630" y2="298" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <!-- outputs -->
+  <rect x="780" y="300" width="200" height="90" rx="10" fill="#fdf3dc" stroke="#b07d00"/>
+  <text x="880" y="324" text-anchor="middle" font-weight="700">PostgreSQL</text>
+  <text x="880" y="344" text-anchor="middle" font-size="11" fill="#5b6670">IntakeFolder (reading)</text>
+  <text x="880" y="360" text-anchor="middle" font-size="11" fill="#5b6670">IntakeImage → first line</text>
+  <text x="880" y="376" text-anchor="middle" font-size="11" fill="#5b6670">then Figure 2 as usual</text>
+  <line x1="730" y1="345" x2="778" y2="345" stroke="#46525c" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <rect x="780" y="420" width="200" height="74" rx="10" fill="#fbe4e1" stroke="#a8352b"/>
+  <text x="880" y="444" text-anchor="middle" font-weight="700">topic anpr.failed</text>
+  <text x="880" y="464" text-anchor="middle" font-size="11" fill="#5b6670">message + reason + position</text>
+  <text x="880" y="480" text-anchor="middle" font-size="11" fill="#5b6670">make kafka-failed</text>
+  <path d="M730,445 L778,457" fill="none" stroke="#a8352b" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#r)"/>
+  <text x="740" y="416" font-size="11" fill="#a8352b">can never</text><text x="740" y="430" font-size="11" fill="#a8352b">work</text>
+
+  <rect x="24" y="436" width="330" height="108" rx="8" fill="#f8f9fa" stroke="#c9d1d9"/>
+  <text x="38" y="458" font-weight="700" font-size="12">Safety rules</text>
+  <g font-size="11" fill="#5b6670">
+    <text x="38" y="478">• bad message → anpr.failed, then committed (never blocks)</text>
+    <text x="38" y="496">• database down → bot exits WITHOUT commit; restarted,</text>
+    <text x="50" y="510">Kafka delivers the same message again</text>
+    <text x="38" y="528">• delivered twice? unique folder path: registered once</text>
+  </g>
+  <text x="370" y="510" font-size="11" fill="#5b6670">More reader bots than partitions: the extra ones get none and stay idle.</text>
+  <text x="370" y="526" font-size="11" fill="#5b6670">Pause (Docker) = leave the group, so the others take its partitions.</text>
+</svg>

@@ -150,7 +150,7 @@ class IntakeFolder(models.Model):
 
     Its `stage` says where it is on the assembly line:
       reading       its images are still being preprocessed / read by OCR
-      needs_llm     OCR finished; only 2 of 4 engines agreed, so the LLM decides
+      needs_llm     OCR read a plate, but below stages.ocr.trip_if_confidence_at_least: the LLM decides
       llm_running   an LLM bot is working on it
       needs_trip    the plate is decided; a trip must be created
       trip_running  a trip bot is working on it

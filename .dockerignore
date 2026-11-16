@@ -1,0 +1,24 @@
+# Never copied into the image.
+
+# Secrets: containers get them at start (env_file in docker-compose.yaml), never baked in
+.env
+envs/.env.*
+!envs/.env.*.example
+sqlite_dump.json
+backups/
+
+# Data and results live outside the image (data/ is mounted into the bot containers)
+data/
+output/
+reports/
+web/db.sqlite3
+*.sqlite3
+
+# Local run files, caches, tools
+.venv/
+**/__pycache__/
+*.pyc
+.git/
+.pytest_cache/
+.run/
+unused/

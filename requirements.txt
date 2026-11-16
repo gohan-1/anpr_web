@@ -1,13 +1,15 @@
 django>=5.1
-prefect>=3.0
 djangorestframework>=3.18
-opencv-python-headless>=4.9
-httpx>=0.27
-pyyaml>=6.0
-pytest>=8.0
-cryptography>=42
-dj-database-url>=2.3
-python-dotenv>=1.2.2
-psycopg[binary]>=3.2      # PostgreSQL driver (for MySQL: pip install mysqlclient)
-fastapi>=0.115            # microservices (reader, and the ones that follow)
-uvicorn>=0.32             # runs a FastAPI service
+drf-spectacular>=0.28            # OpenAPI schema + Swagger UI for the Django API (/api/docs/)
+drf-spectacular-sidecar>=2025.1  # Swagger UI / ReDoc files served locally (no CDN)
+dj-database-url>=2.3             # DATABASE_URL=postgres://... in the env files
+psycopg[binary]>=3.2             # PostgreSQL driver (for MySQL: pip install mysqlclient)
+python-dotenv>=1.2.2             # reads main/.env and envs/.env.<environment>
+cryptography>=42                 # bot API passwords are stored encrypted (Fernet)
+prefect>=3.0                     # optional: each bot batch as a flow run (pipeline.use_prefect)
+confluent-kafka==2.13.0          # reader bots in Kafka mode (reader.mode: kafka)
+httpx>=0.27                      # calls to the OCR API; scripts/build_postman.py
+pyyaml>=6.0                      # config/settings.yaml
+opencv-python-headless>=4.9      # seed_demo: draws demo images
+pytest>=8.0                      # tests
+markdown>=3.6                    # make docs: docs/GUIDE.md -> HTML -> PDF

@@ -1,0 +1,1581 @@
+openapi: 3.0.3
+info:
+  title: ANPR API
+  version: 1.0.0
+  description: |-
+    The API behind the ANPR web app: login, folder results and review, bots, and the assembly line.
+
+    **How to call it:** `POST /api/auth/login/` with your username and password, then send `Authorization: Token <token>` with every request. In Swagger: press **Authorize** and enter `Token <token>` (with the word Token).
+paths:
+  /api/auth/login/:
+    post:
+      operationId: auth_login_create
+      description: 'Send the token back in every request as `Authorization: Token
+        <token>`.'
+      summary: Log in and get a token
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequestRequest'
+            examples:
+              Login:
+                value:
+                  username: operator
+                  password: your-password
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LoginRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LoginRequestRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              examples:
+                Token:
+                  value:
+                    token: 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b
+                    username: operator
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                WrongPassword:
+                  value:
+                    detail: That username and password don't match.
+                  summary: Wrong password
+          description: Wrong username or password
+  /api/auth/logout/:
+    post:
+      operationId: auth_logout_create
+      summary: Log out (the token stops working)
+      tags:
+      - Auth
+      security:
+      - tokenAuth: []
+      responses:
+        '204':
+          description: Logged out
+  /api/auth/me/:
+    get:
+      operationId: auth_me_retrieve
+      summary: Who am I
+      tags:
+      - Auth
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+              examples:
+                Me:
+                  value:
+                    username: operator
+                    review_count: 0
+          description: ''
+  /api/bots/:
+    get:
+      operationId: bots_list
+      summary: All bots
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+        description: bots per page (default 50, max 1000)
+      - in: query
+        name: stage
+        schema:
+          type: string
+          enum:
+          - llm
+          - ocr
+          - preprocess
+          - reader
+          - trip
+        description: only bots of this stage
+      tags:
+      - Bots
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBotList'
+          description: ''
+    post:
+      operationId: bots_create
+      description: OCR bots call the OCR API with their own account (`api_username`
+        + `password`, stored encrypted, never returned). The account is optional while
+        the API is mocked.
+      summary: Create a bot (switched off)
+      tags:
+      - Bots
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BotRequest'
+            examples:
+              OCRBotWithItsAPIAccount:
+                value:
+                  name: ocr-gate1
+                  stage: ocr
+                  api_username: gate1-account
+                  password: api-password
+                  rate_limit: 2
+                summary: OCR bot with its API account
+              ReaderBot:
+                value:
+                  name: reader-1
+                  stage: reader
+                summary: Reader bot
+              TripBot:
+                value:
+                  name: trip-1
+                  stage: trip
+                summary: Trip bot
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BotRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BotRequest'
+        required: true
+      security:
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bot'
+              examples:
+                Created:
+                  value:
+                    id: 7
+                    name: ocr-gate1
+                    stage: ocr
+                    shard: ''
+                    api_username: gate1-account
+                    has_account: true
+                    rate_limit: 2.0
+                    desired_running: false
+                    delete_requested: false
+                    state: stopped
+                    pid: null
+                    host: anpr-server
+                    started_at: '2026-11-13T09:12:04Z'
+                    last_heartbeat: '2026-11-13T09:20:31Z'
+                    heartbeat_age: 1
+                    healthy: true
+                    current_task: 'Batch 12: 20 items'
+                    processed: 0
+                    failed: 0
+                    last_error: ''
+                    restarts: 0
+                    created_at: '2026-11-13T09:11:58Z'
+          description: ''
+  /api/bots/{id}/:
+    get:
+      operationId: bots_retrieve
+      summary: One bot
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this bot.
+        required: true
+      tags:
+      - Bots
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bot'
+              examples:
+                Bot:
+                  value:
+                    id: 7
+                    name: ocr-gate1
+                    stage: ocr
+                    shard: ''
+                    api_username: gate1-account
+                    has_account: true
+                    rate_limit: 2.0
+                    desired_running: true
+                    delete_requested: false
+                    state: running
+                    pid: 104233
+                    host: anpr-server
+                    started_at: '2026-11-13T09:12:04Z'
+                    last_heartbeat: '2026-11-13T09:20:31Z'
+                    heartbeat_age: 1
+                    healthy: true
+                    current_task: 'Batch 12: 20 items'
+                    processed: 240
+                    failed: 0
+                    last_error: ''
+                    restarts: 0
+                    created_at: '2026-11-13T09:11:58Z'
+          description: ''
+    put:
+      operationId: bots_update
+      summary: Replace a bot's editable fields
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this bot.
+        required: true
+      tags:
+      - Bots
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BotRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BotRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BotRequest'
+        required: true
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bot'
+          description: ''
+    patch:
+      operationId: bots_partial_update
+      description: Applies from the bot's next batch. The stage can't change.
+      summary: Change a bot's API account or rate limit
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this bot.
+        required: true
+      tags:
+      - Bots
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedBotRequest'
+            examples:
+              NewRateLimit:
+                value:
+                  rate_limit: 5
+                summary: New rate limit
+              NewPassword:
+                value:
+                  password: new-api-password
+                summary: New password
+              RemoveTheAccount:
+                value:
+                  api_username: ''
+                summary: Remove the account
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedBotRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedBotRequest'
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bot'
+          description: ''
+    delete:
+      operationId: bots_destroy
+      description: |-
+        Deleting doesn't remove the row immediately: the bot first finishes its folders,
+        then the supervisor deletes it. A bot that isn't running is removed right away.
+        Docker mode: only the row of a bot whose container is gone can be removed here.
+      summary: Remove a bot
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this bot.
+        required: true
+      tags:
+      - Bots
+      security:
+      - tokenAuth: []
+      responses:
+        '204':
+          description: Removed at once (it wasn't running)
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bot'
+          description: 'Running: it finishes its batch, then the supervisor removes
+            it'
+  /api/bots/{id}/events/:
+    get:
+      operationId: bots_events_list
+      summary: A bot's last 50 events
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this bot.
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Bots
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBotEventList'
+          description: ''
+  /api/bots/{id}/start/:
+    post:
+      operationId: bots_start_create
+      summary: Switch a bot on
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this bot.
+        required: true
+      tags:
+      - Bots
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bot'
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: It is being removed
+  /api/bots/{id}/stop/:
+    post:
+      operationId: bots_stop_create
+      summary: Switch a bot off (it finishes its batch first)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this bot.
+        required: true
+      tags:
+      - Bots
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bot'
+          description: ''
+  /api/env/:
+    get:
+      operationId: env_retrieve
+      description: Which environment and database this server is connected to (never
+        the password).
+      summary: Which environment and database (never a password)
+      tags:
+      - Dashboard
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Environment'
+              examples:
+                Local:
+                  value:
+                    env: local
+                    read_only: false
+                    database: PostgreSQL localhost/anpr
+          description: ''
+  /api/folders/:
+    get:
+      operationId: folders_list
+      description: 'GET /api/folders/?q=&route=&scenario=&page=  (a generic view:
+        DRF does the listing and paging)'
+      summary: Folder results (Folders page), newest first
+      parameters:
+      - in: query
+        name: page
+        schema:
+          type: integer
+      - in: query
+        name: q
+        schema:
+          type: string
+        description: folder name or plate contains
+      - in: query
+        name: route
+        schema:
+          type: string
+        description: comma-separated, e.g. processed,failed
+      - in: query
+        name: scenario
+        schema:
+          type: string
+        description: comma-separated scenario codes
+      tags:
+      - Folders
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFolderListList'
+          description: ''
+  /api/folders/{id}/:
+    get:
+      operationId: folders_retrieve
+      description: GET /api/folders/<id>/
+      summary: One folder with all its images
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Folders
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolderDetail'
+          description: ''
+  /api/folders/{id}/review/:
+    post:
+      operationId: folders_review_create
+      description: 'POST /api/folders/<id>/review/  body: {"action": "approve"|"correct"|"reject",
+        "plate": "..."}'
+      summary: Approve, correct or reject a folder's plate
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Folders
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewActionRequest'
+            examples:
+              Approve:
+                value:
+                  action: approve
+              Correct:
+                value:
+                  action: correct
+                  plate: MH12AB1234
+              Reject:
+                value:
+                  action: reject
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReviewActionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReviewActionRequest'
+        required: true
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewResult'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: e.g. the corrected plate has the wrong format
+  /api/images/{id}/file/:
+    get:
+      operationId: images_file_retrieve
+      description: Sends the actual image file so React can display it.
+      summary: The image file itself
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Folders
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+          description: ''
+        '404':
+          description: File not available
+  /api/pipeline/:
+    get:
+      operationId: pipeline_retrieve
+      description: 'Everything the Pipeline page shows: per stage, its line, its settings
+        and its bots.'
+      summary: 'Every stage: its line, speed, settings and bots'
+      tags:
+      - Pipeline
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                Overview:
+                  value:
+                    stages:
+                    - stage: ocr
+                      label: OCR
+                      level: image
+                      waiting: 157
+                      working: 20
+                      per_minute: 839.5
+                      failed: 0
+                      bots_wanted: 1
+                      bots_running: 1
+                      settings:
+                        trip_if_confidence_at_least: 0.85
+                        batch_size: 20
+                        parallel: 8
+                        max_attempts: 3
+                        stuck_after_minutes: 10
+                      editable:
+                        batch_size:
+                          value: 20
+                          default: 20
+                          min: 1
+                          max: 1000
+                          decimal: false
+                      can_switch_off: false
+                      enabled: true
+                      bots:
+                      - … same shape as GET /api/bots/{id}/ …
+                    images:
+                      cleaned: 157
+                      ocr_running: 20
+                      read: 560
+                      skipped: 14
+                    folders:
+                      reading: 36
+                      needs_llm: 91
+                      needs_trip: 16
+                    sources:
+                    - name: data
+                      path: ./data
+                      accuracy: high
+                      priority: 1
+                    reader_mode: scan
+                    kafka_topic: anpr.folders
+                    use_prefect: false
+                    ocr_api_mock: true
+                    max_bots_per_stage: 50
+                    bots_managed_by: supervisor
+          description: ''
+  /api/pipeline/{stage}/scale/:
+    post:
+      operationId: pipeline_scale_create
+      description: 'More: new bots `<stage>-<n>` are added, switched on. Fewer: the
+        newest are removed, each finishing its batch first. Answers with the same
+        body as GET /api/pipeline/.'
+      summary: Give a stage exactly N bots (the + / − buttons)
+      parameters:
+      - in: path
+        name: stage
+        schema:
+          type: string
+          enum:
+          - llm
+          - ocr
+          - preprocess
+          - reader
+          - trip
+        description: Stage of the assembly line
+        required: true
+      tags:
+      - Pipeline
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScaleRequestRequest'
+            examples:
+              TwoOCRBots:
+                value:
+                  count: 2
+                summary: Two OCR bots
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ScaleRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ScaleRequestRequest'
+        required: true
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unknown stage
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'Docker mode: scale the bot-<stage> service instead'
+  /api/pipeline/{stage}/settings/:
+    patch:
+      operationId: pipeline_settings_partial_update
+      description: 'Editable: batch_size, parallel, max_attempts, stuck_after_minutes,
+        pause_if_next_line_over, scan_every_seconds (reader), trip_if_confidence_at_least
+        (ocr, 0–1). Bots use them from their next batch. `enabled` (true/false, preprocess
+        only) switches preprocessing off: its waiting images move straight to the
+        OCR line, and new images skip it.'
+      summary: Change a stage's settings (null = back to the settings.yaml default)
+      parameters:
+      - in: path
+        name: stage
+        schema:
+          type: string
+          enum:
+          - llm
+          - ocr
+          - preprocess
+          - reader
+          - trip
+        description: Stage of the assembly line
+        required: true
+      tags:
+      - Pipeline
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+            examples:
+              BiggerBatches:
+                value:
+                  batch_size: 50
+                  parallel: 16
+                summary: Bigger batches
+              BackToDefault:
+                value:
+                  batch_size: null
+                summary: Back to default
+              OCR:StraightToTripFrom0.9:
+                value:
+                  trip_if_confidence_at_least: 0.9
+                summary: 'OCR: straight to trip from 0.9'
+              SwitchPreprocessingOff:
+                value:
+                  enabled: false
+                summary: Switch preprocessing off
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: {}
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: {}
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StageSettingsResult'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                Invalid:
+                  value:
+                    batch_size: Use a number from 1 to 1000.
+          description: '{setting: problem}'
+  /api/pipeline/failed/:
+    get:
+      operationId: pipeline_failed_list
+      description: 'GET ?level=image|folder: the newest failed items with their error.'
+      summary: The newest failed items (max 200) with their error
+      parameters:
+      - in: query
+        name: level
+        schema:
+          type: string
+          enum:
+          - folder
+          - image
+          default: image
+      tags:
+      - Pipeline
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FailedItem'
+              examples:
+                FailedImage:
+                  value:
+                  - - id: 812
+                      name: cam_3.jpg
+                      folder: ocr_4393072
+                      failed_in: ocr
+                      error: 'ConnectError: API unreachable'
+                      attempts: 3
+                  summary: Failed image
+          description: ''
+  /api/pipeline/retry/:
+    post:
+      operationId: pipeline_retry_create
+      description: |-
+        POST {"level": "image", "ids": [1, 2]}: failed items go back to the line they failed in.
+        Without ids: every failed item of that level.
+      summary: Send failed items back to the line they failed in
+      tags:
+      - Pipeline
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetryRequestRequest'
+            examples:
+              RetryAllFailedImages:
+                value:
+                  level: image
+                summary: Retry all failed images
+              RetryTwoImages:
+                value:
+                  level: image
+                  ids:
+                  - 812
+                  - 813
+                summary: Retry two images
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RetryRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RetryRequestRequest'
+        required: true
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetryResult'
+              examples:
+                Result:
+                  value:
+                    moved: 2
+                    folders_reopened: 1
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+  /api/review/next/:
+    get:
+      operationId: review_next_retrieve
+      description: The oldest folder waiting for review, or 204 No Content if the
+        queue is empty.
+      summary: The oldest folder waiting for review
+      tags:
+      - Folders
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolderDetail'
+          description: ''
+        '204':
+          description: Nothing waiting for review
+  /api/stats/:
+    get:
+      operationId: stats_retrieve
+      description: Everything the dashboard charts need, in one request.
+      summary: Everything the Overview charts need
+      parameters:
+      - in: query
+        name: job
+        schema:
+          type: integer
+        description: only this old pipeline run
+      tags:
+      - Dashboard
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                Stats:
+                  value:
+                    total: 143
+                    routes:
+                      processed: 140
+                      accepted: 0
+                      review: 0
+                      no_plate: 0
+                      failed: 3
+                    scenarios: []
+                    daily:
+                    - day: '2026-11-12'
+                      processed: 140
+                      accepted: 0
+                      review: 0
+                      no_plate: 0
+                      failed: 3
+                    score_bins:
+                    - bin: '0.85'
+                      processed: 12
+                      accepted: 0
+                      review: 0
+                      no_plate: 0
+                      failed: 0
+                    scatter:
+                    - confidence: 0.91
+                      quality: null
+                      route: processed
+                    thresholds:
+                      accept_score: 0.85
+                      min_quality: 0.4
+                    reviewed_today: 0
+                    jobs: []
+          description: ''
+components:
+  schemas:
+    ActionEnum:
+      enum:
+      - approve
+      - correct
+      - reject
+      type: string
+      description: |-
+        * `approve` - approve
+        * `correct` - correct
+        * `reject` - reject
+    Bot:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 50
+          pattern: ^[-a-zA-Z0-9_]+$
+        stage:
+          $ref: '#/components/schemas/StageEnum'
+        shard:
+          type: string
+          readOnly: true
+        api_username:
+          type: string
+          maxLength: 150
+        has_account:
+          type: boolean
+          readOnly: true
+        rate_limit:
+          type: number
+          format: double
+        desired_running:
+          type: boolean
+          readOnly: true
+        delete_requested:
+          type: boolean
+          readOnly: true
+        state:
+          allOf:
+          - $ref: '#/components/schemas/StateEnum'
+          readOnly: true
+        pid:
+          type: integer
+          readOnly: true
+          nullable: true
+        host:
+          type: string
+          readOnly: true
+        started_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        last_heartbeat:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        heartbeat_age:
+          type: integer
+          nullable: true
+          readOnly: true
+        healthy:
+          type: boolean
+          readOnly: true
+        current_task:
+          type: string
+          readOnly: true
+        processed:
+          type: integer
+          readOnly: true
+        failed:
+          type: integer
+          readOnly: true
+        last_error:
+          type: string
+          readOnly: true
+        restarts:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - current_task
+      - delete_requested
+      - desired_running
+      - failed
+      - has_account
+      - healthy
+      - heartbeat_age
+      - host
+      - id
+      - last_error
+      - last_heartbeat
+      - name
+      - pid
+      - processed
+      - restarts
+      - shard
+      - started_at
+      - state
+    BotEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        level:
+          type: string
+          maxLength: 10
+        message:
+          type: string
+      required:
+      - created_at
+      - id
+      - message
+    BotRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+          pattern: ^[-a-zA-Z0-9_]+$
+        stage:
+          $ref: '#/components/schemas/StageEnum'
+        api_username:
+          type: string
+          maxLength: 150
+        password:
+          type: string
+          writeOnly: true
+        rate_limit:
+          type: number
+          format: double
+      required:
+      - name
+    EnvEnum:
+      enum:
+      - local
+      - staging
+      - production
+      type: string
+      description: |-
+        * `local` - local
+        * `staging` - staging
+        * `production` - production
+    Environment:
+      type: object
+      properties:
+        env:
+          $ref: '#/components/schemas/EnvEnum'
+        read_only:
+          type: boolean
+        database:
+          type: string
+      required:
+      - database
+      - env
+      - read_only
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    FailedInEnum:
+      enum:
+      - reader
+      - preprocess
+      - ocr
+      - llm
+      - trip
+      type: string
+      description: |-
+        * `reader` - reader
+        * `preprocess` - preprocess
+        * `ocr` - ocr
+        * `llm` - llm
+        * `trip` - trip
+    FailedItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        folder:
+          type: string
+        failed_in:
+          $ref: '#/components/schemas/FailedInEnum'
+        error:
+          type: string
+        attempts:
+          type: integer
+      required:
+      - attempts
+      - error
+      - failed_in
+      - folder
+      - id
+      - name
+    FolderDetail:
+      type: object
+      description: 'Full version for the review screen: includes every image.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        route:
+          $ref: '#/components/schemas/RouteEnum'
+        route_label:
+          type: string
+          readOnly: true
+        scenario:
+          type: string
+          maxLength: 5
+        plate:
+          type: string
+          readOnly: true
+        final_score:
+          type: number
+          format: double
+          nullable: true
+        reviewed_by:
+          type: string
+          maxLength: 150
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        job:
+          type: integer
+          nullable: true
+        reason:
+          type: string
+        final_plate:
+          type: string
+          maxLength: 20
+        reviewed_plate:
+          type: string
+          maxLength: 20
+        reviewed_at:
+          type: string
+          format: date-time
+          nullable: true
+        best_image:
+          type: integer
+          nullable: true
+        candidates: {}
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/Image'
+          readOnly: true
+        min_quality:
+          type: number
+          format: double
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - images
+      - min_quality
+      - name
+      - plate
+      - route_label
+    FolderList:
+      type: object
+      description: 'Small version for the folder table: no images, so the list stays
+        fast.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        route:
+          $ref: '#/components/schemas/RouteEnum'
+        route_label:
+          type: string
+          readOnly: true
+        scenario:
+          type: string
+          maxLength: 5
+        plate:
+          type: string
+          readOnly: true
+        final_score:
+          type: number
+          format: double
+          nullable: true
+        reviewed_by:
+          type: string
+          maxLength: 150
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        job:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - name
+      - plate
+      - route_label
+    Image:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        file_name:
+          type: string
+          maxLength: 255
+        is_duplicate:
+          type: boolean
+        is_corrupt:
+          type: boolean
+        quality:
+          type: number
+          format: double
+          nullable: true
+        plate:
+          type: string
+          maxLength: 20
+        confidence:
+          type: number
+          format: double
+          nullable: true
+        final_score:
+          type: number
+          format: double
+          nullable: true
+        api_error:
+          type: string
+      required:
+      - file_name
+      - id
+    LevelEnum:
+      enum:
+      - image
+      - folder
+      type: string
+      description: |-
+        * `image` - image
+        * `folder` - folder
+    LoginRequestRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+      required:
+      - password
+      - username
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        username:
+          type: string
+      required:
+      - token
+      - username
+    Me:
+      type: object
+      properties:
+        username:
+          type: string
+        review_count:
+          type: integer
+          description: folders waiting for review
+      required:
+      - review_count
+      - username
+    PaginatedBotEventList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BotEvent'
+    PaginatedBotList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Bot'
+    PaginatedFolderListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/FolderList'
+    PatchedBotRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+          pattern: ^[-a-zA-Z0-9_]+$
+        stage:
+          $ref: '#/components/schemas/StageEnum'
+        api_username:
+          type: string
+          maxLength: 150
+        password:
+          type: string
+          writeOnly: true
+        rate_limit:
+          type: number
+          format: double
+    RetryRequestRequest:
+      type: object
+      properties:
+        level:
+          $ref: '#/components/schemas/LevelEnum'
+        ids:
+          type: array
+          items:
+            type: integer
+          description: only these; leave out for every failed item
+      required:
+      - level
+    RetryResult:
+      type: object
+      properties:
+        moved:
+          type: integer
+        folders_reopened:
+          type: integer
+      required:
+      - folders_reopened
+      - moved
+    ReviewActionRequest:
+      type: object
+      description: Checks the data React sends when a reviewer clicks a button.
+      properties:
+        action:
+          $ref: '#/components/schemas/ActionEnum'
+        plate:
+          type: string
+          default: ''
+      required:
+      - action
+    ReviewResult:
+      type: object
+      properties:
+        message:
+          type: string
+        folder:
+          $ref: '#/components/schemas/FolderDetail'
+      required:
+      - folder
+      - message
+    RouteEnum:
+      enum:
+      - pending
+      - processed
+      - accepted
+      - review
+      - no_plate
+      - failed
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `processed` - Processed
+        * `accepted` - Accepted
+        * `review` - Review
+        * `no_plate` - No plate
+        * `failed` - Failed
+    ScaleRequestRequest:
+      type: object
+      properties:
+        count:
+          type: integer
+          minimum: 0
+      required:
+      - count
+    StageEnum:
+      enum:
+      - reader
+      - preprocess
+      - ocr
+      - llm
+      - trip
+      type: string
+      description: |-
+        * `reader` - Reading
+        * `preprocess` - Preprocessing
+        * `ocr` - OCR
+        * `llm` - LLM
+        * `trip` - Trip
+    StageSettingsResult:
+      type: object
+      properties:
+        stage:
+          type: string
+        settings:
+          type: object
+          additionalProperties: {}
+      required:
+      - settings
+      - stage
+    StateEnum:
+      enum:
+      - stopped
+      - starting
+      - running
+      - stopping
+      - crashed
+      type: string
+      description: |-
+        * `stopped` - Stopped
+        * `starting` - Starting
+        * `running` - Running
+        * `stopping` - Stopping
+        * `crashed` - Crashed
+  securitySchemes:
+    tokenAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Token-based authentication with required prefix "Token"
+tags:
+- name: Auth
+  description: 'Log in and out. The token goes in `Authorization: Token <token>`.'
+- name: Dashboard
+  description: Environment and the numbers on the Overview page.
+- name: Folders
+  description: Folder results (Folders page), review actions, image files.
+- name: Bots
+  description: 'Every bot of every stage (Bots page): create, start, stop, edit, remove.'
+- name: Pipeline
+  description: 'The assembly line (Pipeline page): lines, + / −, settings, failures.'

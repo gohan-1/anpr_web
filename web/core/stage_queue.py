@@ -8,11 +8,14 @@ below; when Redis or Kafka replaces PostgreSQL later, only THIS file changes.
     finish()      a finished item moves to its next line
     fail()        a failed item goes back to its line, or is given up after max attempts
     release()     a stopping bot hands back items it took but didn't start
+    reclaim()     a restarted bot gives back what it held before it crashed
     return_stuck() items held too long by a silent bot go back to their line
     record()      count finished/failed items per minute (the speed shown in the UI)
     line_stats()  how many items wait / are being worked on, per stage
     retry()       failed items go back to the line of the stage they failed in
     settings_of() a stage's settings: settings.yaml defaults + changes saved on the Pipeline page
+    set_enabled() switch a stage off (only preprocessing): its line is skipped
+    first_image_stage() the line new images enter: "new", or "cleaned" when preprocessing is off
 """
 from datetime import timedelta
 
@@ -37,6 +40,11 @@ EDITABLE_SETTINGS = {
 }
 
 
+# Stages that may be switched off on the Pipeline page. Images then skip them: with
+# preprocessing off, the reader puts new images straight into the OCR line.
+CAN_SWITCH_OFF = {"preprocess"}
+
+
 def settings_of(stage: str) -> dict:
     """settings.yaml defaults for this stage, with any value saved on the Pipeline page on top.
     Bots call this before every batch, so a change applies without a restart."""
@@ -48,8 +56,15 @@ def settings_of(stage: str) -> dict:
 
 
 def save_settings(stage: str, changes: dict, user: str = "") -> dict:
-    """Validates and stores changes (None = back to the settings.yaml default). Returns the new settings."""
+    """Validates and stores changes (None = back to the settings.yaml default). Returns the new
+    settings. "enabled": true/false switches a stage on or off (only those in CAN_SWITCH_OFF)."""
+    changes = dict(changes)
+    enabled = changes.pop("enabled", None)
     errors = {}
+    if enabled is not None and stage not in CAN_SWITCH_OFF:
+        errors["enabled"] = "This stage can't be switched off."
+    elif enabled is not None and not isinstance(enabled, bool):
+        errors["enabled"] = "Use true or false."
     for key, value in changes.items():
         if key not in EDITABLE_SETTINGS:
             errors[key] = "This setting can't be changed here."
@@ -61,16 +76,54 @@ def save_settings(stage: str, changes: dict, user: str = "") -> dict:
             errors[key] = f"Use a number from {low} to {high}."
     if errors:
         raise ValueError(errors)
+    if changes:
+        row, _ = StageSettings.objects.get_or_create(stage=stage)
+        for key, value in changes.items():
+            if value is None:
+                row.values.pop(key, None)
+            else:
+                low, _ = EDITABLE_SETTINGS[key]
+                row.values[key] = float(value) if isinstance(low, float) else int(value)
+        row.updated_by = user
+        row.save()
+    if enabled is not None:
+        set_enabled(stage, enabled, user)
+    return settings_of(stage)
+
+
+def is_enabled(stage: str) -> bool:
+    return bool(settings_of(stage).get("enabled", True))
+
+
+def set_enabled(stage: str, on: bool, user: str = "") -> int:
+    """Switches a stage on or off. Switching off moves the items waiting in its line on to
+    the next line at once (preprocessing off: "new" images go straight to OCR). Items a bot
+    is working on right now finish normally. Returns how many items were moved."""
+    if stage not in CAN_SWITCH_OFF:
+        raise ValueError(f"The {stage} stage can't be switched off.")
     row, _ = StageSettings.objects.get_or_create(stage=stage)
-    for key, value in changes.items():
-        if value is None:
-            row.values.pop(key, None)
-        else:
-            low, _ = EDITABLE_SETTINGS[key]
-            row.values[key] = float(value) if isinstance(low, float) else int(value)
+    row.values["enabled"] = bool(on)
     row.updated_by = user
     row.save()
-    return settings_of(stage)
+    return 0 if on else skip_switched_off()
+
+
+def skip_switched_off() -> int:
+    """Moves items waiting in the line of a switched-off stage on to the next line. Called
+    when a stage is switched off, and by the housekeeping round (an image registered at the
+    very moment of switching can still land in the old line)."""
+    moved = 0
+    for name in CAN_SWITCH_OFF:
+        if not is_enabled(name):
+            s = STAGES[name]
+            moved += model_of(name).objects.filter(stage=s.waits_in).update(stage=s.goes_to)
+    return moved
+
+
+def first_image_stage() -> str:
+    """The line a newly registered image enters: preprocessing's, or OCR's when it's off."""
+    pre = STAGES["preprocess"]
+    return pre.waits_in if is_enabled("preprocess") else pre.goes_to
 
 
 def model_of(stage: str):
@@ -128,6 +181,19 @@ def release(stage: str, items, bot: str) -> int:
     s = STAGES[stage]
     return model_of(stage).objects.filter(id__in=[i.id for i in items], stage=s.working, taken_by=bot).update(
         stage=s.waits_in, taken_by="", taken_at=None, attempts=F("attempts") - 1)
+
+
+def reclaim(stage: str, bot: str, max_attempts: int) -> int:
+    """A bot that (re)starts gives back the items still held under its name: they come from
+    its previous run, which crashed or was killed. Like return_stuck, but at once. An item
+    that has used all its attempts (it may be what crashed the bot) is failed instead."""
+    s = STAGES[stage]
+    held = model_of(stage).objects.filter(stage=s.working, taken_by=bot)
+    failed = held.filter(attempts__gte=max_attempts).update(
+        stage="failed", taken_by="", taken_at=None, failed_in=stage,
+        last_error="Its bot stopped while working on it, on every attempt")
+    back = held.filter(attempts__lt=max_attempts).update(stage=s.waits_in, taken_by="", taken_at=None)
+    return failed + back
 
 
 def return_stuck(stage: str, minutes: float, max_attempts: int) -> int:

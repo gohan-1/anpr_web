@@ -332,9 +332,109 @@ class OcrStageTests(TestCase):
         self.assertEqual(bot.ctx.limiter.per_second, 4)
 
     def test_supervisor_routes_a_folder_nobody_finished(self):
-        from core.management.commands.bot_supervisor import Command
+        from core.housekeeping import route_forgotten_folders
         IntakeImage.objects.update(stage="read", plate="AB12", confidence=0.97, read_by="ocr-1")
-        self.assertEqual(Command().route_forgotten_folders(), 1)
+        self.assertEqual(route_forgotten_folders(), 1)
         self.assertEqual(IntakeFolder.objects.get().stage, "needs_trip")
-        self.assertEqual(Command().route_forgotten_folders(), 0)   # exactly once
+        self.assertEqual(route_forgotten_folders(), 0)   # exactly once
 
+
+
+# ---------------------------------------------------------------- Docker mode: one bot = one container
+from datetime import timedelta  # noqa: E402
+from io import StringIO  # noqa: E402
+
+from django.core.management import call_command  # noqa: E402
+from django.core.management.base import CommandError  # noqa: E402
+
+
+@override_settings(BOTS_MANAGED_BY="docker")
+class DockerModeTests(APITestCase):
+    """Bots are added and removed only by scaling containers; the web app pauses/resumes them."""
+
+    def setUp(self):
+        get_user_model().objects.create_user("sam", password="pass12345")
+        token = self.client.post("/api/auth/login/", {"username": "sam", "password": "pass12345"},
+                                 format="json").data["token"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+    def alive(self, name, stage="ocr", ago=0, **kw):
+        return Bot.objects.create(name=name, stage=stage, desired_running=True, state=Bot.State.RUNNING,
+                                  last_heartbeat=timezone.now() - timedelta(seconds=ago), **kw)
+
+    def test_web_app_cannot_add_or_scale_bots(self):
+        self.assertEqual(self.client.post("/api/bots/", {"name": "ocr-x", "stage": "ocr"}, format="json").status_code, 403)
+        r = self.client.post("/api/pipeline/ocr/scale/", {"count": 3}, format="json")
+        self.assertEqual(r.status_code, 403)
+        self.assertIn("--scale", r.json()["detail"])
+        self.assertEqual(self.client.get("/api/pipeline/").data["bots_managed_by"], "docker")
+
+    def test_only_the_row_of_a_gone_container_can_be_removed(self):
+        running, gone = self.alive("ocr-abc"), self.alive("ocr-old", ago=3600)
+        self.assertEqual(self.client.delete(f"/api/bots/{running.id}/").status_code, 403)
+        self.assertEqual(self.client.delete(f"/api/bots/{gone.id}/").status_code, 204)
+        self.assertEqual(list(Bot.objects.values_list("name", flat=True)), ["ocr-abc"])
+
+    def test_stop_pauses_the_container_instead_of_ending_it(self):
+        make_folder(images=2)
+        IntakeImage.objects.update(stage="cleaned")
+        bot = ocr_bot("ocr-c1")
+        self.client.post(f"/api/bots/{bot.bot_id}/stop/")
+        self.assertFalse(bot.should_stop())                       # the process keeps running...
+        self.assertTrue(bot.wait_while_paused())                  # ...but takes no work
+        self.assertEqual(Bot.objects.get(name="ocr-c1").current_task, "Paused from the web app")
+        self.assertEqual(IntakeImage.objects.filter(stage="cleaned").count(), 2)
+        self.client.post(f"/api/bots/{bot.bot_id}/start/")
+        self.assertFalse(bot.wait_while_paused())                 # resumed
+        bot.stopping = False              # (the test's nap() above marked it as stopping)
+        bot.run()
+        self.assertEqual(IntakeImage.objects.filter(stage="read").count(), 2)
+
+    def test_container_environment_sets_the_api_account(self):
+        with patch.dict("os.environ", {"BOT_API_USERNAME": "gate1", "BOT_API_PASSWORD": "pw1", "BOT_RATE_LIMIT": "2.5"}):
+            bot = StageBot("ocr-env", "ocr")
+            bot.register()
+        row = Bot.objects.get(name="ocr-env")
+        self.assertEqual((row.api_username, row.get_password(), row.rate_limit), ("gate1", "pw1", 2.5))
+
+    def test_housekeeper_numbers_readers_and_removes_gone_bots(self):
+        self.alive("reader-b", stage="reader")
+        self.alive("reader-a", stage="reader")
+        self.alive("reader-z", stage="reader", ago=600)           # gone: not counted, then removed
+        self.alive("ocr-old", ago=3600)
+        call_command("housekeeper", "--once", stdout=StringIO())
+        self.assertEqual(dict(Bot.objects.values_list("name", "shard")), {"reader-a": "1/2", "reader-b": "2/2"})
+
+    def test_supervisor_refuses_in_docker_mode(self):
+        with self.assertRaisesMessage(CommandError, "housekeeper"):
+            call_command("bot_supervisor", "--yes")
+
+    def test_housekeeper_in_development_never_removes_switched_off_bots(self):
+        self.alive("ocr-off", ago=3600)                           # simply switched off for an hour
+        folder = make_folder(images=1)
+        IntakeImage.objects.update(stage="read", plate="AB12", confidence=0.95)
+        with override_settings(BOTS_MANAGED_BY="supervisor"):
+            out = StringIO()
+            call_command("housekeeper", "--once", stdout=out)
+        self.assertTrue(Bot.objects.filter(name="ocr-off").exists())      # kept
+        folder.refresh_from_db()
+        self.assertEqual(folder.stage, "needs_trip")                       # the safe chores ran
+        self.assertIn("development", out.getvalue())
+
+    def test_cleanly_stopped_container_is_removed_after_a_minute_but_a_paused_bot_never(self):
+        stopped = self.alive("ocr-old", ago=90)
+        Bot.objects.filter(pk=stopped.pk).update(state=Bot.State.STOPPED)          # container stopped
+        paused = self.alive("ocr-paused", ago=1)
+        Bot.objects.filter(pk=paused.pk).update(state=Bot.State.STOPPED, desired_running=False)
+        just_stopped = self.alive("ocr-new", ago=10)
+        Bot.objects.filter(pk=just_stopped.pk).update(state=Bot.State.STOPPED)     # maybe restarting
+        call_command("housekeeper", "--once", stdout=StringIO())
+        self.assertEqual(sorted(Bot.objects.values_list("name", flat=True)), ["ocr-new", "ocr-paused"])
+
+    def test_reader_follows_the_shard_the_housekeeper_assigned(self):
+        from bots.runner import ReaderBot
+        bot = ReaderBot("reader-q", "")
+        bot.register(shard="")
+        Bot.objects.filter(name="reader-q").update(shard="2/3")
+        bot.follow_assigned_shard()
+        self.assertEqual(str(bot.shard), "2/3")
